@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from pyspark.sql.functions import col, pandas_udf, PandasUDFType
+from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import ArrayType, FloatType
 
 from sparkext.model import ExternalModel
@@ -20,6 +20,7 @@ class Model(ExternalModel):
         super().__init__(model)
 
     def _from_file(self, model_path):
+        # TODO: handle plain saved_model
         # self.model = tf.saved_model.load(model_path)
         self.model = tf.keras.models.load_model(model_path)
         self.model.summary()
