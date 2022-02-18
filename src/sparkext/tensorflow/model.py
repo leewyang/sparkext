@@ -1,10 +1,11 @@
 import tensorflow as tf
-from sparkext.model import BaseModel
+from sparkext.model import ExternalModel
 
-class TFModel(BaseModel):
+class Model(ExternalModel):
+
     def __init__(self, model):
-        self.model = None
-        super(TFModel, self).__init__(model)
+        self.model = model
+        super().__init__(model)
 
     def _from_file(self, model_path):
         self.model = tf.saved_model.load(model_path)
@@ -16,4 +17,5 @@ class TFModel(BaseModel):
     def _transform(self, dataset):
         def predict_udf(batch_iter):
             predictions = self.model.predict()
+        return dataset
 

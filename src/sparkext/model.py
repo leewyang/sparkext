@@ -1,13 +1,14 @@
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from pyspark.ml import Transformer
 
-class ExternalModel(Transformer, metaclass=ABCMeta):
+class ExternalModel(Transformer, ABC):
+
     def __init__(self, model):
         self.model = model
         if type(model) == str:
-          self.__from_file(model)
+          self._from_file(model)
         else:
-          self.__from_object(model)
+          self._from_object(model)
         super(ExternalModel, self).__init__()
 
     @abstractmethod
