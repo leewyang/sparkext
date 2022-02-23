@@ -15,9 +15,8 @@ class Model(ExternalModel):
     - Output DataFrame produces a single column consisting of an array of float.
     """
 
-    def __init__(self, model, input_shape):
+    def __init__(self, model):
         self.model = model
-        self.input_shape = input_shape
         super().__init__(model)
 
     def _from_file(self, model_path):
@@ -35,7 +34,7 @@ class Model(ExternalModel):
         def predict(data: pd.Series) -> pd.Series:
             for batch in data:
                 input = np.vstack(batch)
-                input = torch.from_numpy(input.reshape(self.input_shape))
+                input = torch.from_numpy(input.reshape(self.getInputShape()))
                 output = self.model(input)
                 yield pd.Series(list(output.detach().numpy()))
 
