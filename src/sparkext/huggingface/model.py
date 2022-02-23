@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import torch
+import transformers
 
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import StringType
@@ -15,17 +15,19 @@ class Model(ExternalModel):
     - Output DataFrame produces a single string column.
     """
 
-    def __init__(self, model, tokenizer, prefix):
+    def __init__(self, model, tokenizer=None, prefix=None):
         # TODO: prefix as argument
         self.model = model
         self.tokenizer = tokenizer
         self.prefix = prefix
         # print("model: {}".format(model))
         # print("tokenizer: {}".format(tokenizer))
+        super(Model, self).__init__(model)
 
     def _from_file(self, model_path):
         # TODO: handle path to local cache
-        raise NotImplementedError()
+        self.model = transformers.AutoModel.from_pretrained(model_path)
+        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_path)
 
     def _from_object(self, model):
         self.model = model
