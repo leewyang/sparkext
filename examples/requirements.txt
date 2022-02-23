@@ -1,0 +1,10 @@
+matplotlib
+numpy
+pandas
+pyspark
+sentencepiece
+tensorflow
+torch
+torchtext
+torchvision
+transformers
