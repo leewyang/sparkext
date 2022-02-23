@@ -15,10 +15,11 @@ class Model(ExternalModel):
     - Output DataFrame produces a single string column.
     """
 
-    def __init__(self, model, tokenizer):
+    def __init__(self, model, tokenizer, prefix):
         # TODO: prefix as argument
         self.model = model
         self.tokenizer = tokenizer
+        self.prefix = prefix
         # print("model: {}".format(model))
         # print("tokenizer: {}".format(tokenizer))
 
@@ -35,7 +36,7 @@ class Model(ExternalModel):
         @pandas_udf(StringType(), PandasUDFType.SCALAR_ITER)
         def predict(data: pd.Series) -> pd.Series:
             for batch in data:
-                input = batch.to_list()
+                input = [self.prefix + s for s in batch.to_list()]
                 input_ids = self.tokenizer(input, padding="longest", max_length=128, truncation=True, return_tensors="pt").input_ids
                 output_ids = self.model.generate(input_ids)
                 output = [self.tokenizer.decode(o, skip_special_tokens=True) for o in output_ids]
