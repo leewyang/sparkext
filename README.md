@@ -1,1 +1,1 @@
-Spark ML inference using external ML frameworks
+Spark DL inference using external frameworks
