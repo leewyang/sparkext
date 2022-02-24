@@ -2,19 +2,17 @@ from abc import ABC, abstractmethod
 from pyspark.ml import Transformer
 from pyspark.ml.param.shared import Param, Params, TypeConverters
 
-class HasInputShape(Params):
+class CommonParams(Params):
+
     input_shape = Param(Params._dummy(), "input_shape", "Input shape expected by model", typeConverter=TypeConverters.toListInt)
 
-    def __init__(self):
-        super(HasInputShape, self).__init__()
-
-    def setInputShape(self, value):
-        return self._set(input_shape=value)
+    def __init__(self, *args):
+        super(CommonParams, self).__init__(*args)
 
     def getInputShape(self):
         return self.getOrDefault(self.input_shape)
 
-class ExternalModel(Transformer, HasInputShape, ABC):
+class ExternalModel(Transformer, CommonParams, ABC):
 
     def __init__(self, model):
         self.model = model
@@ -32,3 +30,5 @@ class ExternalModel(Transformer, HasInputShape, ABC):
     def _from_object(self, model):
         raise NotImplementedError()
 
+    def setInputShape(self, value):
+        return self._set(input_shape=value)

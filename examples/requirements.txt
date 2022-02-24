@@ -1,9 +1,12 @@
+huggingface
+jupyterlab
 matplotlib
 numpy
 pandas
+pyarrow
 pyspark
 sentencepiece
-tensorflow
+tensorflow-cpu
 torch
 torchtext
 torchvision
