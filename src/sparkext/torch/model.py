@@ -20,8 +20,16 @@ class Model(ExternalModel):
         super().__init__(model)
 
     def _from_file(self, model_path):
-        # TODO: handle state dictionary
-        self.model = torch.load(model_path)
+        assert(type(model_path) is str)
+        if model_path.endswith(".pt") or model_path.endswith(".pth"):
+            # pickle
+            self.model = torch.load(model_path)
+        elif model_path.endswith(".ts"):
+            # torchscript
+            # TODO: doesn't work, model serialization error in pyspark
+            self.model = torch.jit.load(model_path)
+        else:
+            raise ValueError("Unknown PyTorch model format: {}".format(model_path))
         print(self.model)
 
     def _from_object(self, model):
