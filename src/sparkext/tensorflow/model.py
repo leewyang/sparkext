@@ -19,7 +19,7 @@ class Model(ExternalModel):
         self.model = model
         super().__init__(model)
 
-    def _from_file(self, model_path):
+    def _from_string(self, model_path):
         # TODO: handle plain saved_model
         # self.model = tf.saved_model.load(model_path)
         self.model = tf.keras.models.load_model(model_path)

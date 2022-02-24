@@ -17,17 +17,19 @@ class ExternalModel(Transformer, CommonParams, ABC):
     def __init__(self, model):
         self.model = model
         if type(model) == str:
-          self._from_file(model)
+          self._from_string(model)
         else:
           self._from_object(model)
         super(ExternalModel, self).__init__()
 
     @abstractmethod
-    def _from_file(self, model_path):
+    def _from_string(self, model_path):
+        """Instantiate from a string path or identifier."""
         raise NotImplementedError()
 
     @abstractmethod
     def _from_object(self, model):
+        """Instantiate from a model object from framework."""
         raise NotImplementedError()
 
     def setInputShape(self, value):

@@ -19,7 +19,7 @@ class Model(ExternalModel):
         self.model = model
         super().__init__(model)
 
-    def _from_file(self, model_path):
+    def _from_string(self, model_path):
         assert(type(model_path) is str)
         if model_path.endswith(".pt") or model_path.endswith(".pth"):
             # pickle

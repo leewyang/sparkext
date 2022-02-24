@@ -57,7 +57,7 @@ class Model(ExternalModel, TokenizerParams):
         # print("tokenizer: {}".format(tokenizer))
         super(Model, self).__init__(model)
 
-    def _from_file(self, model_path):
+    def _from_string(self, model_path):
         # TODO: handle path to local cache
         self.model = transformers.AutoModel.from_pretrained(model_path)
         self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_path)
