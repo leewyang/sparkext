@@ -7,6 +7,7 @@ from pyspark.sql.types import ArrayType, FloatType
 
 from sparkext.model import ExternalModel
 
+
 class Model(ExternalModel):
     """Spark ML Model wrapper for TensorFlow Keras saved_models.
 
@@ -15,14 +16,21 @@ class Model(ExternalModel):
     - Output DataFrame produces a single column consisting of an array of float.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, custom_objects=None):
         self.model = model
+        self.custom_objects = custom_objects
         super().__init__(model)
 
     def _from_string(self, model_path):
         # TODO: handle plain saved_model
         # self.model = tf.saved_model.load(model_path)
-        self.model = tf.keras.models.load_model(model_path)
+        if self.custom_objects:
+            # TODO: doesn't work, fix serialization error
+            with tf.keras.utils.custom_object_scope(self.custom_objects):
+                self.model = tf.keras.models.load_model(model_path)
+        else:
+            self.model = tf.keras.models.load_model(model_path)
+
         self.model.summary()
 
     def _from_object(self, model):
@@ -40,4 +48,3 @@ class Model(ExternalModel):
                 yield pd.Series(list(output))
 
         return dataset.select(predict(dataset[0]).alias("prediction"))
-

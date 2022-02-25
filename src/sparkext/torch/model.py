@@ -26,7 +26,7 @@ class Model(ExternalModel):
             self.model = torch.load(model_path)
         elif model_path.endswith(".ts"):
             # torchscript
-            # TODO: doesn't work, model serialization error in pyspark
+            # TODO: fix torchscipt, fails with model serialization error in pyspark
             self.model = torch.jit.load(model_path)
         else:
             raise ValueError("Unknown PyTorch model format: {}".format(model_path))
