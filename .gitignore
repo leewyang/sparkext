@@ -5,3 +5,12 @@ __pycache__
 *.pt
 *.pth
 *.ts
+aclImdb*
+data
+fashion_mnist_test
+imdb_test
+imdb_translations
+mnist_model
+mnist_test
+mnist_predictions
+text_model
