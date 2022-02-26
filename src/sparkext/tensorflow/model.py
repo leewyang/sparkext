@@ -16,35 +16,39 @@ class Model(ExternalModel):
     - Output DataFrame produces a single column consisting of an array of float.
     """
 
-    def __init__(self, model, custom_objects=None):
+    def __init__(self, model, model_loader=None):
         self.model = model
-        self.custom_objects = custom_objects
+        self.model_loader = model_loader
         super().__init__(model)
 
     def _from_string(self, model_path):
+        assert(type(model_path) is str)
         # TODO: handle plain saved_model
         # self.model = tf.saved_model.load(model_path)
-        if self.custom_objects:
-            # TODO: doesn't work, fix serialization error
-            with tf.keras.utils.custom_object_scope(self.custom_objects):
-                self.model = tf.keras.models.load_model(model_path)
-        else:
+        if not self.model_loader:
+            print("Loading model on driver from {}".format(model_path))
             self.model = tf.keras.models.load_model(model_path)
-
-        self.model.summary()
+            self.model.summary()
+        else:
+            print("Deferring model loading to executors.")
 
     def _from_object(self, model):
         self.model = model
 
     def _transform(self, dataset):
-
         # TODO: use/fix type hints
         # @pandas_udf("array<float>")
         @pandas_udf(ArrayType(FloatType()), PandasUDFType.SCALAR_ITER)
         def predict(data: pd.Series) -> pd.Series:
+            if self.model_loader:
+                print("Loading model on executor from: {}".format(self.model))
+                executor_model = self.model_loader(self.model)
+            else:
+                executor_model = self.model
+
             for batch in data:
                 input = np.vstack(batch)
-                output = self.model.predict(input)
+                output = executor_model.predict(input)
                 yield pd.Series(list(output))
 
         return dataset.select(predict(dataset[0]).alias("prediction"))
