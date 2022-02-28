@@ -4,6 +4,7 @@ import torch
 
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import ArrayType, FloatType
+from typing import Iterator
 
 from sparkext.model import ExternalModel
 
@@ -39,10 +40,8 @@ class Model(ExternalModel):
         self.model = model
 
     def _transform(self, dataset):
-        # TODO: use/fix type hints
-        # @pandas_udf("array<float>")
-        @pandas_udf(ArrayType(FloatType()), PandasUDFType.SCALAR_ITER)
-        def predict(data: pd.Series) -> pd.Series:
+        @pandas_udf("array<float>")
+        def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
             if self.model_loader:
                 print("Loading model on executor from: {}".format(self.model))
                 executor_model = self.model_loader(self.model)

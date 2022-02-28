@@ -1,10 +1,10 @@
-import numpy as np
 import pandas as pd
 import transformers
 
 from pyspark.ml.param.shared import Param, Params, TypeConverters
 from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.sql.types import StringType
+from typing import Iterator
 
 from sparkext.model import ExternalModel
 
@@ -66,10 +66,8 @@ class Model(ExternalModel, TokenizerParams):
         self.model = model
 
     def _transform(self, dataset):
-        # TODO: use/fix type hints
-        # @pandas_udf("array<float>")
-        @pandas_udf(StringType(), PandasUDFType.SCALAR_ITER)
-        def predict(data: pd.Series) -> pd.Series:
+        @pandas_udf("string")
+        def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
             for batch in data:
                 input = [self.prefix + s for s in batch.to_list()]
                 input_ids = self.tokenizer(input,
