@@ -66,6 +66,7 @@ class Model(ExternalModel, TokenizerParams):
         self.model = model
 
     def _transform(self, dataset):
+        # TODO: support more flexible input/output types
         @pandas_udf("string")
         def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
             for batch in data:
