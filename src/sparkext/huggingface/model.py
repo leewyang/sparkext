@@ -49,7 +49,8 @@ class Model(ExternalModel, TokenizerParams):
     """
 
     def __init__(self, model, tokenizer=None, prefix=None):
-        # TODO: prefix as argument
+        # TODO: add prefix as transformer
+        # TODO: add tokenizer as transformer
         self.model = model
         self.tokenizer = tokenizer
         self.prefix = prefix
@@ -66,6 +67,7 @@ class Model(ExternalModel, TokenizerParams):
         self.model = model
 
     def _transform(self, dataset):
+        # TODO: cache model on executors
         # TODO: support more flexible input/output types
         @pandas_udf("string")
         def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
@@ -82,3 +84,14 @@ class Model(ExternalModel, TokenizerParams):
 
         return dataset.select(predict(dataset[0]).alias("prediction"))
 
+    # def _transform(self, dataset):
+    #     # TODO: cache model on executors
+    #     # TODO: support more flexible input/output types
+    #     @pandas_udf("array<float>")
+    #     def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    #         for batch in data:
+    #             input = [s for s in batch.to_list()]
+    #             output = self.model.encode(input)
+    #             yield pd.Series(list(output))
+
+    #     return dataset.select(predict(dataset[0]).alias("prediction"))

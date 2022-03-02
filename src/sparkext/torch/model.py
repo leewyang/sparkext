@@ -40,6 +40,7 @@ class Model(ExternalModel):
         self.model = model
 
     def _transform(self, dataset):
+        # TODO: cache model on executors
         # TODO: support more flexible input/output types
         @pandas_udf("array<float>")
         def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
