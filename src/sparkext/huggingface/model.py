@@ -1,4 +1,5 @@
 import pandas as pd
+import sentence_transformers
 import transformers
 
 from pyspark.ml.param.shared import Param, Params, TypeConverters
@@ -70,7 +71,7 @@ class Model(ExternalModel, TokenizerParams):
         # TODO: cache model on executors
         # TODO: support more flexible input/output types
         @pandas_udf("string")
-        def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+        def predict_string(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
             for batch in data:
                 input = [self.prefix + s for s in batch.to_list()]
                 input_ids = self.tokenizer(input,
@@ -82,16 +83,16 @@ class Model(ExternalModel, TokenizerParams):
                 output = [self.tokenizer.decode(o, skip_special_tokens=self.getSkipSpecialTokens()) for o in output_ids]
                 yield pd.Series(list(output))
 
+        @pandas_udf("array<float>")
+        def predict_floats(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for batch in data:
+                input = [s for s in batch.to_list()]
+                output = self.model.encode(input)
+                yield pd.Series(list(output))
+
+        if isinstance(self.model, transformers.PreTrainedModel):
+            predict = predict_string
+        elif isinstance(self.model, sentence_transformers.SentenceTransformer):
+            predict = predict_floats
+
         return dataset.select(predict(dataset[0]).alias("prediction"))
-
-    # def _transform(self, dataset):
-    #     # TODO: cache model on executors
-    #     # TODO: support more flexible input/output types
-    #     @pandas_udf("array<float>")
-    #     def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
-    #         for batch in data:
-    #             input = [s for s in batch.to_list()]
-    #             output = self.model.encode(input)
-    #             yield pd.Series(list(output))
-
-    #     return dataset.select(predict(dataset[0]).alias("prediction"))
