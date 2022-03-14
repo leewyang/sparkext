@@ -53,7 +53,7 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
             output = [executor_tokenizer.decode(o, **kwargs) for o in output_ids] if executor_tokenizer else output_ids
             yield pd.Series(list(output))
 
-    def predict_pipeline(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    def predict_pipeline(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         if model_loader:
             print("Loading model on executors from: {}".format(model))
             executor_model = model_loader(model)
@@ -61,9 +61,8 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
             executor_model = driver_model
 
         for batch in data:
-            input = [s for s in batch.to_list()]
-            output = executor_model(input)
-            yield pd.Series([x['label'] for x in output])
+            output = executor_model(list(batch))
+            yield pd.DataFrame([(x['label'], x['score']) for x in output])
 
     def predict_sentence_transformer(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         if model_loader:
@@ -83,7 +82,7 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
         else:
             return pandas_udf(predict_model, "array<int>")
     elif isinstance(driver_model, transformers.pipelines.Pipeline):
-        return pandas_udf(predict_pipeline, "string")
+        return pandas_udf(predict_pipeline, "label string, score float")
     elif "sentence_transformers" in optional_imports and isinstance(driver_model, sentence_transformers.SentenceTransformer):
         return pandas_udf(predict_sentence_transformer, "array<float>")
     else:
