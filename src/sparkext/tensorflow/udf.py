@@ -2,36 +2,65 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
+from dataclasses import dataclass
 from pyspark.sql.functions import pandas_udf
 from typing import Iterator
 
 
+udf_types = {
+    tf.int32: "array<int>",
+    tf.float32: "array<float>"
+}
+
+@dataclass(frozen=True)
+class ModelSummary:
+    num_params: int
+    input: tuple
+    output: tuple
+
+def summary(model):
+    # TODO: support multiple inputs/outputs
+    input0 = model.inputs[0]
+    output0 = model.outputs[0]
+    input = (input0.shape, input0.dtype)
+    output = (output0.shape, output0.dtype)
+    num_params = model.count_params()
+    return ModelSummary(num_params, input, output)
+
 def model_udf(model, model_loader=None, **kwargs):
+    driver_model = None
     if model_loader:
         print("Deferring model loading to executors.")
+        # temporarily load model on driver to get model metadata
+        driver_model = model_loader(model)
     elif type(model) is str:
         print("Loading model on driver from {}".format(model))
-        m = tf.keras.models.load_model(model)
-        m.summary()
+        driver_model = tf.keras.models.load_model(model)
+        driver_model.summary()
     elif type(model) is object:
-        m = model
+        driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
 
-    # TODO: infer UDF return type from model (or from arg)
+    # get model input_shape and output_type
+    model_summary = summary(driver_model)
+    print(model_summary)
+    input_shape = list(model_summary.input[0])
+    input_shape[0] = -1
+    output_type = udf_types[model_summary.output[1]]
+
     # TODO: infer input cols
     # TODO: input/output tensor support
-    @pandas_udf("array<float>")
     def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         if model_loader:
             print("Loading model on executors from: {}".format(model))
             executor_model = model_loader(model)
         else:
-            executor_model = m
+            executor_model = driver_model
 
         for batch in data:
-            input = np.vstack(batch)
+            input = np.vstack(batch).reshape(input_shape)
             output = executor_model.predict(input)
             yield pd.Series(list(output))
 
-    return predict
+    return pandas_udf(predict, output_type)

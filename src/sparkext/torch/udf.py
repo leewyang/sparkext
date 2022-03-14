@@ -56,6 +56,8 @@ def model_udf(model, input_shape, model_loader=None, **kwargs):
     if model_loader:
         driver_model = None
 
+    # TODO: infer input cols
+    # TODO: input/output tensor support
     def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         if model_loader:
             print("Loading model on executor from: {}".format(model))
@@ -64,8 +66,8 @@ def model_udf(model, input_shape, model_loader=None, **kwargs):
             executor_model = driver_model
 
         for batch in data:
-            input = np.vstack(batch)
-            input = torch.from_numpy(input.reshape(input_shape))
+            input = np.vstack(batch).reshape(input_shape)
+            input = torch.from_numpy(input)
             output = executor_model(input)
             yield pd.Series(list(output.detach().numpy()))
 
