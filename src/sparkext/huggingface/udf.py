@@ -5,12 +5,10 @@ from pyspark.sql.functions import pandas_udf
 # from transformers import pipeline
 from typing import Iterator
 
-optional_imports = []
 try:
     import sentence_transformers
-    optional_imports.append("sentence_transformers")
-except:
-    pass
+except ImportError:
+    sentence_transformers = None
 
 
 def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
@@ -31,7 +29,7 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
         driver_tokenizer = tokenizer
     elif isinstance(model, transformers.pipelines.Pipeline):
         driver_model = model
-    elif "sentence_transformers" in optional_imports and isinstance(model, sentence_transformers.SentenceTransformer):
+    elif sentence_transformers and isinstance(model, sentence_transformers.SentenceTransformer):
         driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
@@ -77,13 +75,11 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
             yield pd.Series(list(output))
 
     if isinstance(driver_model, transformers.PreTrainedModel):
-        if driver_tokenizer:
-            return pandas_udf(predict_model, "string")
-        else:
-            return pandas_udf(predict_model, "array<int>")
+        output_type = "string" if driver_tokenizer else "array<int>"
+        return pandas_udf(predict_model, output_type)
     elif isinstance(driver_model, transformers.pipelines.Pipeline):
         return pandas_udf(predict_pipeline, "label string, score float")
-    elif "sentence_transformers" in optional_imports and isinstance(driver_model, sentence_transformers.SentenceTransformer):
+    elif sentence_transformers and isinstance(driver_model, sentence_transformers.SentenceTransformer):
         return pandas_udf(predict_sentence_transformer, "array<float>")
     else:
         raise ValueError("Unsupported model type: {}".format(type(driver_model)))
