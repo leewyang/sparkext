@@ -8,8 +8,16 @@ from typing import Iterator
 
 
 udf_types = {
-    torch.int32: "array<int>",
-    torch.float32: "array<float>"
+    torch.bool: "bool",
+    torch.int8: "byte",
+    torch.int16: "short",
+    torch.int32: "int",
+    torch.int64: "long",
+    torch.long: "long",
+    torch.float: "float",
+    torch.float32: "float",
+    torch.float64: "double",
+    torch.double: "double"
 }
 
 @dataclass(frozen=True)
@@ -50,7 +58,9 @@ def model_udf(model, input_shape, model_loader=None, **kwargs):
     print(model_summary)
     input_shape = list(model_summary.input[0])
     input_shape[0] = -1
+    output_shape = model_summary.output[0]
     output_type = udf_types[model_summary.output[1]]
+    output_type = "array<{}>".format(output_type) if len(output_shape) > 0 else output_type
 
     # clear the driver_model if using model_loader on executors to avoid serialization/errors
     if model_loader:

@@ -8,8 +8,15 @@ from typing import Iterator
 
 
 udf_types = {
-    tf.int32: "array<int>",
-    tf.float32: "array<float>"
+    tf.bool: "bool",
+    tf.int8: "byte",
+    tf.int16: "short",
+    tf.int32: "int",
+    tf.int64: "long",
+    tf.float32: "float",
+    tf.float64: "double",
+    tf.double: "double",
+    tf.string: "str"
 }
 
 @dataclass(frozen=True)
@@ -28,6 +35,7 @@ def summary(model):
     return ModelSummary(num_params, input, output)
 
 def model_udf(model, model_loader=None, **kwargs):
+    # TODO: handle plain saved_models
     driver_model = None
     if model_loader:
         print("Deferring model loading to executors.")
@@ -47,7 +55,9 @@ def model_udf(model, model_loader=None, **kwargs):
     print(model_summary)
     input_shape = list(model_summary.input[0])
     input_shape[0] = -1
+    output_shape = model_summary.output[0]
     output_type = udf_types[model_summary.output[1]]
+    output_type = "array<{}>".format(output_type) if len(output_shape) > 0 else output_type
 
     # TODO: infer input cols
     # TODO: input/output tensor support
