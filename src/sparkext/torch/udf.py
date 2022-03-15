@@ -4,7 +4,7 @@ import torch
 
 from dataclasses import dataclass
 from pyspark.sql.functions import pandas_udf
-from typing import Iterator
+from typing import Callable, Iterator, Optional, Union
 
 
 udf_types = {
@@ -33,7 +33,9 @@ def summary(model):
     num_params = sum([p.shape.numel() for p in params])
     return ModelSummary(num_params, input, output)
 
-def model_udf(model, input_shape, model_loader=None, **kwargs):
+def model_udf(model: Union[str, torch.nn.Module],
+              model_loader: Optional[Callable] = None,
+              **kwargs):
     driver_model = None
     if model_loader:
         print("Deferring model loading to executors.")
@@ -48,7 +50,7 @@ def model_udf(model, input_shape, model_loader=None, **kwargs):
             raise ValueError("TorchScript models must use model_loader function.")
         else:
             raise ValueError("Unknown PyTorch model format: {}".format(model))
-    elif type(model) is object:
+    elif type(model) is torch.nn.Module:
         driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))    

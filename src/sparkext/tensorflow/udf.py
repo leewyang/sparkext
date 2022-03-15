@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from dataclasses import dataclass
 from pyspark.sql.functions import pandas_udf
-from typing import Iterator
+from typing import Callable, Iterator, Optional, Union
 
 
 udf_types = {
@@ -25,7 +25,7 @@ class ModelSummary:
     input: tuple
     output: tuple
 
-def summary(model):
+def summary(model: tf.keras.Model):
     # TODO: support multiple inputs/outputs
     input0 = model.inputs[0]
     output0 = model.outputs[0]
@@ -34,7 +34,9 @@ def summary(model):
     num_params = model.count_params()
     return ModelSummary(num_params, input, output)
 
-def model_udf(model, model_loader=None, **kwargs):
+def model_udf(model: Union[str, tf.keras.Model],
+              model_loader: Optional[Callable] = None,
+              **kwargs):
     # TODO: handle plain saved_models
     driver_model = None
     if model_loader:
@@ -45,7 +47,7 @@ def model_udf(model, model_loader=None, **kwargs):
         print("Loading model on driver from {}".format(model))
         driver_model = tf.keras.models.load_model(model)
         driver_model.summary()
-    elif type(model) is object:
+    elif type(model) is tf.keras.Model:
         driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
