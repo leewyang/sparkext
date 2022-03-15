@@ -2,8 +2,7 @@ import pandas as pd
 import transformers
 
 from pyspark.sql.functions import pandas_udf
-# from transformers import pipeline
-from typing import Iterator
+from typing import Callable, Iterator, Optional, Union
 
 try:
     import sentence_transformers
@@ -11,10 +10,11 @@ except ImportError:
     sentence_transformers = None
 
 
-def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
-    # TODO: handle pipelines: https://huggingface.co/docs/transformers/master/en/main_classes/pipelines#transformers.pipeline
-    # TODO: add prefix as transformer
-    # TODO: add tokenizer as transformer
+def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipelines.Pipeline, sentence_transformers.SentenceTransformer],
+              tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
+              return_type: Optional[str] = "string",
+              model_loader: Optional[Callable] = None,
+              **kwargs):
     # TODO: handle path to local cache
     driver_model = None
     driver_tokenizer = None
@@ -25,11 +25,15 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
         driver_model = transformers.AutoModel.from_pretrained(model)
         driver_tokenizer = transformers.AutoTokenizer.from_pretrained(model)
     elif isinstance(model, transformers.PreTrainedModel):
+        print("Using supplied Model and Tokenizer")
+        assert tokenizer, "Please provide associated tokenizer"
         driver_model = model
         driver_tokenizer = tokenizer
     elif isinstance(model, transformers.pipelines.Pipeline):
+        print("Using supplied Pipeline")
         driver_model = model
     elif sentence_transformers and isinstance(model, sentence_transformers.SentenceTransformer):
+        print("Using supplied SentenceTransformer")
         driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
@@ -45,8 +49,7 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
         executor_tokenizer = driver_tokenizer
 
         for batch in data:
-            input = [prefix + s for s in batch.to_list()]
-            input_ids = executor_tokenizer(input, **kwargs).input_ids if executor_tokenizer else input
+            input_ids = executor_tokenizer(list(batch), **kwargs).input_ids if executor_tokenizer else input
             output_ids = executor_model.generate(input_ids)
             output = [executor_tokenizer.decode(o, **kwargs) for o in output_ids] if executor_tokenizer else output_ids
             yield pd.Series(list(output))
@@ -60,7 +63,7 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
 
         for batch in data:
             output = executor_model(list(batch))
-            yield pd.DataFrame([(x['label'], x['score']) for x in output])
+            yield pd.DataFrame([result.values() for result in output])
 
     def predict_sentence_transformer(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         if model_loader:
@@ -70,16 +73,14 @@ def model_udf(model, model_loader=None, tokenizer=None, prefix=None, **kwargs):
             executor_model = driver_model
 
         for batch in data:
-            input = [s for s in batch.to_list()]
-            output = executor_model.encode(input)
+            output = executor_model.encode(list(batch))
             yield pd.Series(list(output))
 
     if isinstance(driver_model, transformers.PreTrainedModel):
-        output_type = "string" if driver_tokenizer else "array<int>"
-        return pandas_udf(predict_model, output_type)
+        return pandas_udf(predict_model, return_type)
     elif isinstance(driver_model, transformers.pipelines.Pipeline):
-        return pandas_udf(predict_pipeline, "label string, score float")
+        return pandas_udf(predict_pipeline, return_type)
     elif sentence_transformers and isinstance(driver_model, sentence_transformers.SentenceTransformer):
-        return pandas_udf(predict_sentence_transformer, "array<float>")
+        return pandas_udf(predict_sentence_transformer, return_type)
     else:
         raise ValueError("Unsupported model type: {}".format(type(driver_model)))
