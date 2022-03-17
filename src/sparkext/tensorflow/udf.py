@@ -20,31 +20,43 @@ udf_types = {
     tf.string: "str"
 }
 
+@dataclass(frozen=True)
+class TensorSummary():
+    shape: list[int]
+    dtype: tf.DType
+    name: str
+
 class ModelSummary():
-    """Helper class to get basic model metadata w/o serializing model."""
+    """Helper class to get spark-serializable metadata for a potentially unserializable model."""
     num_params: int
-    inputs: list[tf.Tensor]
-    outputs: list[tf.Tensor]
+    inputs: list[TensorSummary]
+    outputs: list[TensorSummary]
+    return_type: str = None
 
     def __init__(self, model: tf.keras.Model):
         self.num_params = model.count_params()
-        self.inputs = model.inputs
-        self.outputs = model.outputs
+        self.inputs = [TensorSummary(list(input.shape), input.dtype, input.name) for input in model.inputs]
+        self.outputs = [TensorSummary(list(output.shape), output.dtype, output.name) for output in model.outputs]
+        self.return_type = self.get_return_type()
 
     def __repr__(self) -> str:
-        return "ModelSummary(num_params={}, inputs={}, outputs={})".format(self.num_params, self.inputs, self.outputs)
+        return "ModelSummary(num_params={}, inputs={}, outputs={}) -> {}".format(self.num_params, self.inputs, self.outputs, self.return_type)
 
-    def return_type(self, names=False) -> str:
+    def get_return_type(self, names=False) -> str:
+        """Get Spark SQL type string for output of the model."""
+
         def type_str(tensor: tf.Tensor) -> str:
+            # map tf.dtype to sql type str
             udf_type = udf_types[tensor.dtype]
+            # normalize name for spark, stripping off anything after '/' or ':'
             name = re.split('[/:]', tensor.name)[0]
+            # wrap sql type str with 'array', if needed
             tensor_type = f"array<{udf_type}>" if len(tensor.shape) > 0 else udf_type
             return f"{name} {tensor_type}" if names else f"{tensor_type}"
 
         output_types = [type_str(output) for output in self.outputs]
-        final_string = ', '.join(output_types)
-        print(f"return_type: {final_string}")
-        return final_string
+        self.return_type = ', '.join(output_types)
+        return self.return_type
 
 def model_udf(model: Union[str, tf.keras.Model],
               model_loader: Optional[Callable] = None,
@@ -65,11 +77,10 @@ def model_udf(model: Union[str, tf.keras.Model],
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
 
-    # get model input_shape and output_type
+    # get model output_type
+    # note: need to do this on the driver to construct the pandas_udf below
     model_summary = ModelSummary(driver_model)
     print(model_summary)
-    output_type = model_summary.return_type()
-
     # clear the driver_model if using model_loader to avoid serialization/errors
     if model_loader:
         driver_model = None
@@ -93,7 +104,7 @@ def model_udf(model: Union[str, tf.keras.Model],
                 input = dict(zip(input_columns, batch))
             else:
                 # vstack the batch if only one input expected
-                input_shape = list(executor_model.inputs[0].shape)
+                input_shape = model_summary.inputs[0].shape
                 input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
                 input = np.vstack(batch).reshape(input_shape)
                 input = np.vstack(batch)
@@ -102,4 +113,4 @@ def model_udf(model: Union[str, tf.keras.Model],
             output = executor_model.predict(input)
             yield pd.Series(list(output))
 
-    return pandas_udf(predict, output_type)
+    return pandas_udf(predict, model_summary.return_type)
