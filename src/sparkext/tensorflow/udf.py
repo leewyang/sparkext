@@ -61,6 +61,10 @@ def model_udf(model: Union[str, tf.keras.Model],
     output_type = udf_types[model_summary.output[1]]
     output_type = "array<{}>".format(output_type) if len(output_shape) > 0 else output_type
 
+    # clear the driver_model if using model_loader to avoid serialization/errors
+    if model_loader:
+        driver_model = None
+
     # TODO: infer input cols
     # TODO: input/output tensor support
     def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
