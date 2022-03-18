@@ -35,6 +35,7 @@ def summary(model):
 
 def model_udf(model: Union[str, torch.nn.Module],
               model_loader: Optional[Callable] = None,
+              input_columns: Optional[list[str]] = None,
               **kwargs):
     driver_model = None
     if model_loader:
@@ -43,7 +44,7 @@ def model_udf(model: Union[str, torch.nn.Module],
         driver_model = model_loader(model)
     elif type(model) is str:
         if model.endswith(".pt") or model.endswith(".pth"):
-            # pickle
+            # pickled model
             print("Loading model on driver from {}".format(model))
             driver_model = torch.load(model)
         elif model.endswith(".ts"):
@@ -70,7 +71,7 @@ def model_udf(model: Union[str, torch.nn.Module],
 
     # TODO: infer input cols
     # TODO: input/output tensor support
-    def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         if model_loader:
             print("Loading model on executor from: {}".format(model))
             executor_model = model_loader(model)
@@ -78,9 +79,19 @@ def model_udf(model: Union[str, torch.nn.Module],
             executor_model = driver_model
 
         for batch in data:
-            input = np.vstack(batch).reshape(input_shape)
-            input = torch.from_numpy(input)
-            output = executor_model(input)
+            if input_columns:
+                print("batch: {}".format(type(batch[0])))
+                # check if the number of inputs matches expected
+                num_expected = len(input_columns)
+                num_actual = len(batch)
+                assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
+                input = [torch.from_numpy(column.to_numpy().astype(np.float32)) for column in batch]
+                output = executor_model(*input)
+            else:
+                input = np.vstack(batch).reshape(input_shape)
+                input = torch.from_numpy(input)
+                output = executor_model(input)
+
             yield pd.Series(list(output.detach().numpy()))
 
     return pandas_udf(predict, output_type)
