@@ -95,8 +95,8 @@ def model_udf(model: Union[str, tf.keras.Model],
             executor_model = driver_model
 
         for batch in data:
-            # first, check if the number of inputs matches expected
             if input_columns:
+                # check if the number of inputs matches expected
                 num_expected = len(input_columns)
                 num_actual = len(batch)
                 assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
@@ -107,7 +107,6 @@ def model_udf(model: Union[str, tf.keras.Model],
                 input_shape = model_summary.inputs[0].shape
                 input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
                 input = np.vstack(batch).reshape(input_shape)
-                input = np.vstack(batch)
 
             # predict and return result
             output = executor_model.predict(input)
