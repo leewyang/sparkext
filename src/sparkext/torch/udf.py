@@ -20,18 +20,47 @@ udf_types = {
     torch.double: "double"
 }
 
-@dataclass(frozen=True)
-class ModelSummary:
-    num_params: int
-    input: tuple
-    output: tuple
 
-def summary(model):
-    params = list(model.parameters())
-    input = (params[0].shape, params[0].dtype)
-    output = (params[-1].shape, params[-1].dtype)
-    num_params = sum([p.shape.numel() for p in params])
-    return ModelSummary(num_params, input, output)
+@dataclass(frozen=True)
+class TensorSummary():
+    shape: list[int]
+    dtype: torch.dtype
+    name: str
+
+
+class ModelSummary:
+    """Helper class to get spark-serializable metadata for a potentially unserializable model."""
+    num_params: int
+    inputs: list[TensorSummary]
+    outputs: list[TensorSummary]
+    return_type: str
+
+    def __init__(self, model):
+        params = list(model.parameters())
+        self.num_params = sum([p.shape.numel() for p in params])
+        # TODO: should inputs reflect signature of forward()
+        self.inputs = [TensorSummary(list(params[0].shape), params[0].dtype, params[0].name)]
+        self.outputs = [TensorSummary(list(params[-1].shape), params[-1].dtype, params[-1].name)]
+        self.return_type = self.get_return_type()
+
+    def __repr__(self) -> str:
+        return "ModelSummary(num_params={}, inputs={}, outputs={}) -> {}".format(self.num_params, self.inputs, self.outputs, self.return_type)
+
+    def get_return_type(self, names=False) -> str:
+        """Get Spark SQL type string for output of the model."""
+
+        def type_str(tensor: torch.Tensor) -> str:
+            # map tf.dtype to sql type str
+            udf_type = udf_types[tensor.dtype]
+            name = tensor.name
+            # wrap sql type str with 'array', if needed
+            tensor_type = f"array<{udf_type}>" if len(tensor.shape) > 0 else udf_type
+            return f"{name} {tensor_type}" if names else f"{tensor_type}"
+
+        output_types = [type_str(output) for output in self.outputs]
+        self.return_type = ', '.join(output_types)
+        return self.return_type
+
 
 def model_udf(model: Union[str, torch.nn.Module],
               model_loader: Optional[Callable] = None,
@@ -54,17 +83,11 @@ def model_udf(model: Union[str, torch.nn.Module],
     elif type(model) is torch.nn.Module:
         driver_model = model
     else:
-        raise ValueError("Unsupported model type: {}".format(type(model)))    
+        raise ValueError("Unsupported model type: {}".format(type(model)))
 
     # get model input_shape and output_type
-    model_summary = summary(driver_model)
+    model_summary = ModelSummary(driver_model)
     print(model_summary)
-    input_shape = list(model_summary.input[0])
-    input_shape[0] = -1
-    output_shape = model_summary.output[0]
-    output_type = udf_types[model_summary.output[1]]
-    output_type = "array<{}>".format(output_type) if len(output_shape) > 0 else output_type
-
     # clear the driver_model if using model_loader to avoid serialization/errors
     if model_loader:
         driver_model = None
@@ -85,13 +108,15 @@ def model_udf(model: Union[str, torch.nn.Module],
                 num_expected = len(input_columns)
                 num_actual = len(batch)
                 assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
-                input = [torch.from_numpy(column.to_numpy().astype(np.float32)) for column in batch]
+                input = [torch.from_numpy(column.to_numpy()) for column in batch]
                 output = executor_model(*input)
             else:
+                input_shape = model_summary.inputs[0].shape
+                input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
                 input = np.vstack(batch).reshape(input_shape)
                 input = torch.from_numpy(input)
                 output = executor_model(input)
 
             yield pd.Series(list(output.detach().numpy()))
 
-    return pandas_udf(predict, output_type)
+    return pandas_udf(predict, model_summary.return_type)
