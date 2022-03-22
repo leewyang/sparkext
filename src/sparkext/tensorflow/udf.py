@@ -85,8 +85,7 @@ def model_udf(model: Union[str, tf.keras.Model],
     if model_loader:
         driver_model = None
 
-    # TODO: infer input cols
-    # TODO: input/output tensor support
+    # TODO: cache model on executors
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         if model_loader:
             print("Loading model on executors from: {}".format(model))
