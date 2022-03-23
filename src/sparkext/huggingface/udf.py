@@ -9,7 +9,10 @@ try:
 except ImportError:
     sentence_transformers = None
 
-
+# TODO: prohibit model instances due to serialization issues?
+# TODO: only allow model_loader, which can instantiate model and tokenizer and encapsulate tokenizer params
+# TODO: move sentence_transformers to it's own submodule?
+# TODO: use separate dictionaries for model/tokenizer kwargs?
 def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipelines.Pipeline, sentence_transformers.SentenceTransformer],
               tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
               return_type: Optional[str] = "string",
