@@ -1,8 +1,10 @@
+import shutil
 import numpy as np
 import random
 import unittest
 
 from packaging import version
+from pathlib import Path
 from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import array, col
@@ -36,6 +38,13 @@ class TensorFlowTest(SparkTest):
         cls.train_examples = np.column_stack((cls.features, cls.labels))
         cls.test_examples = np.array([[1.0, 1.0]])
 
+        cls.model_path = str(Path.absolute(Path.cwd() / "tf_model"))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.model_path)
+        return super().tearDownClass()
+
     def create_model(self):
         # create a simple keras linear model with two inputs
         model = tf.keras.models.Sequential([
@@ -60,10 +69,10 @@ class TensorFlowTest(SparkTest):
         self.assertAlmostEqual(result, 4.758, 2)
 
         # save model to disk
-        model.save("tf_model")
+        model.save(self.model_path)
 
         # create pandas_udf from saved model on disk
-        linear = model_udf("tf_model")
+        linear = model_udf(self.model_path)
 
         # create test dataframe (converting to array of float)
         df = self.spark.createDataFrame(self.test_examples.tolist())

@@ -1,5 +1,6 @@
-import random
 import numpy as np
+import os
+import random
 import unittest
 
 from packaging import version
@@ -48,7 +49,12 @@ class PyTorchTest(SparkTest):
         cls.train_examples = np.column_stack((cls.features, cls.labels))
         cls.test_examples = np.array([[1.0, 1.0]])
 
-        cls.model_dir = str(Path.absolute(Path.cwd() / "torch_model.pt"))
+        cls.model_path = str(Path.absolute(Path.cwd() / "torch_model.pt"))
+
+    @classmethod
+    def tearDownClass(cls):
+        os.system("rm -r {}".format(cls.model_path))
+        return super().tearDownClass()
 
     @unittest.skipIf(torch is None, "torch is not installed.")
     def test_min_version(self):
@@ -87,7 +93,7 @@ class PyTorchTest(SparkTest):
         self.assertAlmostEqual(result, 4.758, 1)
 
         # save model to disk
-        torch.save(model.state_dict(), self.model_dir)
+        torch.save(model.state_dict(), self.model_path)
 
         # create pandas_udf from saved model on disk
         def model_loader(model_path):
@@ -110,7 +116,7 @@ class PyTorchTest(SparkTest):
 
             return model
 
-        linear = model_udf(self.model_dir, model_loader=model_loader)
+        linear = model_udf(self.model_path, model_loader=model_loader)
 
         # create test dataframe (converting to array of float)
         df = self.spark.createDataFrame(self.test_examples.astype(float).tolist(), schema="_1 float, _2 float")
