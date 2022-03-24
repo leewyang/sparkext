@@ -5,8 +5,6 @@ import unittest
 
 from packaging import version
 from pathlib import Path
-from pyspark import SparkConf, SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import array, col
 from sparkext.torch import model_udf
 from test_base import SparkTest
@@ -56,15 +54,16 @@ class PyTorchTest(SparkTest):
         os.system("rm -r {}".format(cls.model_path))
         return super().tearDownClass()
 
-    @unittest.skipIf(torch is None, "torch is not installed.")
+    @unittest.skipUnless(torch, "torch is not installed.")
     def test_min_version(self):
         torch_version = version.parse(torch.__version__)
         min_version = version.parse("1.8")
         self.assertTrue(torch_version > min_version,
                         "minimum supported version is {}".format(min_version))
 
-    @unittest.skipIf(torch is None, "torch is not installed.")
-    def test_torch(self):
+    @unittest.skipUnless(torch, "torch is not installed.")
+    def test_udf(self):
+        # build and test simple model
         device = "cuda" if torch.cuda.is_available() else "cpu"
         model = LinearNN().to(device)
         loss_fn = torch.nn.MSELoss()
@@ -90,7 +89,7 @@ class PyTorchTest(SparkTest):
         test = torch.from_numpy(self.test_examples).float()
         preds = model(test)
         result = preds[0][0].detach().numpy()
-        self.assertAlmostEqual(result, 4.758, 1)
+        self.assertAlmostEqual(result, 4.758, 2)
 
         # save model to disk
         torch.save(model.state_dict(), self.model_path)
@@ -125,7 +124,7 @@ class PyTorchTest(SparkTest):
         # apply model to test dataframe
         preds = df.withColumn("preds", linear(col("data"))).select("preds").collect()
         result = preds[0].preds[0]
-        self.assertAlmostEqual(result, 4.758, 1)
+        self.assertAlmostEqual(result, 4.758, 2)
 
 
 if __name__ == '__main__':

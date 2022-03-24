@@ -5,8 +5,6 @@ import unittest
 
 from packaging import version
 from pathlib import Path
-from pyspark import SparkConf, SparkContext
-from pyspark.sql import SparkSession
 from pyspark.sql.functions import array, col
 from sparkext.tensorflow import model_udf
 from test_base import SparkTest
@@ -60,7 +58,8 @@ class TensorFlowTest(SparkTest):
         self.assertTrue(tf_version > min_version, "minimum supported version is {}".format(min_version))
 
     @unittest.skipIf(tf is None, "tensorflow is not installed.")
-    def test_tensorflow(self):
+    def test_udf(self):
+        # build and test simple model
         model = self.create_model()
         model.fit(self.features, self.labels, epochs=10)
         model.evaluate(self.features, self.labels)
