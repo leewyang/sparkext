@@ -87,6 +87,7 @@ def model_udf(model: Union[str, tf.keras.Model],
         driver_model = None
 
     # TODO: cache model on executors
+    # TODO: configurable batch size
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         if model_loader:
             print("Loading model on executors from: {}".format(model))
