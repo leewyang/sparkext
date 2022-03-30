@@ -58,40 +58,52 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
 
     # TODO: cache model on executors
     def predict_model(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
-        if model_loader:
-            print("Loading model on executors from: {}".format(model))
-            executor_model = model_loader(model)
+        import sparkext.huggingface.globals as hf_globals
+        if hf_globals.executor_model:
+            print("Using cached model: {}".format(hf_globals.executor_model))
         else:
-            executor_model = driver_model
+            if model_loader:
+                print("Loading model on executors from: {}".format(model))
+                hf_globals.executor_model = model_loader(model)
+            else:
+                hf_globals.executor_model = driver_model
 
         executor_tokenizer = driver_tokenizer
 
         for batch in data:
             input_ids = executor_tokenizer(list(batch), **kwargs).input_ids if executor_tokenizer else input
-            output_ids = executor_model.generate(input_ids)
+            output_ids = hf_globals.executor_model.generate(input_ids)
             output = [executor_tokenizer.decode(o, **kwargs) for o in output_ids] if executor_tokenizer else output_ids
             yield pd.Series(list(output))
 
     def predict_pipeline(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
-        if model_loader:
-            print("Loading model on executors from: {}".format(model))
-            executor_model = model_loader(model)
+        import sparkext.huggingface.globals as hf_globals
+        if hf_globals.executor_model:
+            print("Using cached model: {}".format(hf_globals.executor_model))
         else:
-            executor_model = driver_model
+            if model_loader:
+                print("Loading model on executors from: {}".format(model))
+                hf_globals.executor_model = model_loader(model)
+            else:
+                hf_globals.executor_model = driver_model
 
         for batch in data:
-            output = executor_model(list(batch))
+            output = hf_globals.executor_model(list(batch))
             yield pd.DataFrame([result.values() for result in output])
 
     def predict_sentence_transformer(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
-        if model_loader:
-            print("Loading model on executors from: {}".format(model))
-            executor_model = model_loader(model)
+        import sparkext.huggingface.globals as hf_globals
+        if hf_globals.executor_model:
+            print("Using cached model: {}".format(hf_globals.executor_model))
         else:
-            executor_model = driver_model
+            if model_loader:
+                print("Loading model on executors from: {}".format(model))
+                hf_globals.executor_model = model_loader(model)
+            else:
+                hf_globals.executor_model = driver_model
 
         for batch in data:
-            output = executor_model.encode(list(batch))
+            output = hf_globals.executor_model.encode(list(batch))
             yield pd.Series(list(output))
 
     if isinstance(driver_model, transformers.PreTrainedModel):

@@ -109,11 +109,16 @@ def model_udf(model: Union[str, torch.nn.Module],
 
     # TODO: cache model on executors
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
-        if model_loader:
-            print("Loading model on executor from: {}".format(model))
-            executor_model = model_loader(model)
+        import sparkext.torch.globals as torch_globals
+        if torch_globals.executor_model:
+            print("Using cached model: {}".format(torch_globals.executor_model))
         else:
-            executor_model = driver_model
+            if model_loader:
+                print("Loading model on executor from: {}".format(model))
+                torch_globals.executor_model = model_loader(model)
+            else:
+                print("Using serialized model from driver")
+                torch_globals.executor_model = driver_model
 
         for batch in data:
             if input_columns:
@@ -123,13 +128,13 @@ def model_udf(model: Union[str, torch.nn.Module],
                 num_actual = len(batch)
                 assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
                 input = [torch.from_numpy(column.to_numpy()) for column in batch]
-                output = executor_model(*input)
+                output = torch_globals.executor_model(*input)
             else:
                 input_shape = model_summary.inputs[0].shape
                 input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
                 input = np.vstack(batch).reshape(input_shape)
                 input = torch.from_numpy(input)
-                output = executor_model(input)
+                output = torch_globals.executor_model(input)
 
             yield pd.Series(list(output.detach().numpy()))
 

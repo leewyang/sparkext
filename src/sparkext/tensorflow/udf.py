@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 import re
 import tensorflow as tf
+import time
 
 from dataclasses import dataclass
 from pyspark.sql.functions import pandas_udf
@@ -104,11 +105,18 @@ def model_udf(model: Union[str, tf.keras.Model],
     # TODO: cache model on executors
     # TODO: configurable batch size
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
-        if model_loader:
-            print("Loading model on executors from: {}".format(model))
-            executor_model = model_loader(model)
+        import sparkext.tensorflow.globals as tf_globals
+
+        if tf_globals.executor_model:
+            print("Using cached model: {}".format(tf_globals.executor_model))
         else:
-            executor_model = driver_model
+            if model_loader:
+                print("Loading model on executors from: {}".format(model))
+                tf_globals.executor_model = model_loader(model)
+                time.sleep(5)
+            else:
+                print("Using serialized model from driver")
+                tf_globals.executor_model = driver_model
 
         for batch in data:
             if input_columns:
@@ -125,7 +133,7 @@ def model_udf(model: Union[str, tf.keras.Model],
                 input = np.vstack(batch).reshape(input_shape)
 
             # predict and return result
-            output = executor_model.predict(input)
+            output = tf_globals.executor_model.predict(input)
             yield pd.Series(list(output))
 
     return pandas_udf(predict, model_summary.return_type)
