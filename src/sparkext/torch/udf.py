@@ -107,9 +107,12 @@ def model_udf(model: Union[str, torch.nn.Module],
     if model_loader:
         driver_model = None
 
-    # TODO: cache model on executors
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         import sparkext.torch.globals as torch_globals
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print("Using {} device".format(device))
+
         if torch_globals.executor_model:
             print("Using cached model: {}".format(torch_globals.executor_model))
         else:
@@ -119,6 +122,7 @@ def model_udf(model: Union[str, torch.nn.Module],
             else:
                 print("Using serialized model from driver")
                 torch_globals.executor_model = driver_model
+            torch_globals.executor_model.to(device)
 
         for batch in data:
             if input_columns:
@@ -127,15 +131,15 @@ def model_udf(model: Union[str, torch.nn.Module],
                 num_expected = len(input_columns)
                 num_actual = len(batch)
                 assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
-                input = [torch.from_numpy(column.to_numpy()) for column in batch]
+                input = [torch.from_numpy(column.to_numpy()).to(device) for column in batch]
                 output = torch_globals.executor_model(*input)
             else:
                 input_shape = model_summary.inputs[0].shape
                 input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
                 input = np.vstack(batch).reshape(input_shape)
-                input = torch.from_numpy(input)
+                input = torch.from_numpy(input).to(device)
                 output = torch_globals.executor_model(input)
 
-            yield pd.Series(list(output.detach().numpy()))
+            yield pd.Series(list(output.detach().cpu().numpy()))
 
     return pandas_udf(predict, model_summary.return_type)

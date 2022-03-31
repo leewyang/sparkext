@@ -56,9 +56,15 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
 
-    # TODO: cache model on executors
+    # TODO: refactor predict functions
+    # TODO: handle huggingface tensorflow models
     def predict_model(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         import sparkext.huggingface.globals as hf_globals
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print("Using {} device".format(device))
+
         if hf_globals.executor_model:
             print("Using cached model: {}".format(hf_globals.executor_model))
         else:
@@ -67,17 +73,20 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
                 hf_globals.executor_model = model_loader(model)
             else:
                 hf_globals.executor_model = driver_model
+            hf_globals.executor_model.to(device)
 
         executor_tokenizer = driver_tokenizer
 
         for batch in data:
             input_ids = executor_tokenizer(list(batch), **kwargs).input_ids if executor_tokenizer else input
-            output_ids = hf_globals.executor_model.generate(input_ids)
+            output_ids = hf_globals.executor_model.generate(input_ids.to(device))
             output = [executor_tokenizer.decode(o, **kwargs) for o in output_ids] if executor_tokenizer else output_ids
             yield pd.Series(list(output))
 
     def predict_pipeline(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         import sparkext.huggingface.globals as hf_globals
+        import torch
+
         if hf_globals.executor_model:
             print("Using cached model: {}".format(hf_globals.executor_model))
         else:
@@ -85,6 +94,7 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
                 print("Loading model on executors from: {}".format(model))
                 hf_globals.executor_model = model_loader(model)
             else:
+                print("Using serialized model from driver")
                 hf_globals.executor_model = driver_model
 
         for batch in data:
@@ -93,6 +103,11 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
 
     def predict_sentence_transformer(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         import sparkext.huggingface.globals as hf_globals
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print("Using {} device".format(device))
+
         if hf_globals.executor_model:
             print("Using cached model: {}".format(hf_globals.executor_model))
         else:
@@ -101,6 +116,7 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
                 hf_globals.executor_model = model_loader(model)
             else:
                 hf_globals.executor_model = driver_model
+            hf_globals.executor_model.to(device)
 
         for batch in data:
             output = hf_globals.executor_model.encode(list(batch))

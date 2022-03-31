@@ -102,7 +102,6 @@ def model_udf(model: Union[str, tf.keras.Model],
     if model_loader:
         driver_model = None
 
-    # TODO: cache model on executors
     # TODO: configurable batch size
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         import sparkext.tensorflow.globals as tf_globals
