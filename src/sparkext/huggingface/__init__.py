@@ -14,4 +14,4 @@
 # limitations under the License.
 
 from sparkext.huggingface.model import Model
-from sparkext.huggingface.udf import model_udf
+from sparkext.huggingface.udf import model_udf, pipeline_udf, sentence_transformer_udf

@@ -16,6 +16,7 @@
 import numpy as np
 import pandas as pd
 import torch
+import uuid
 
 from dataclasses import dataclass
 from pyspark.sql.functions import pandas_udf
@@ -82,6 +83,8 @@ def model_udf(model: Union[str, torch.nn.Module],
               input_columns: Optional[list[str]] = None,
               **kwargs):
     driver_model = None
+    model_uuid = uuid.uuid4()
+
     if model_loader:
         print("Deferring model loading to executors.")
         # temporarily load model on driver to get model metadata
@@ -113,7 +116,7 @@ def model_udf(model: Union[str, torch.nn.Module],
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print("Using {} device".format(device))
 
-        if torch_globals.executor_model:
+        if torch_globals.executor_model and torch_globals.model_uuid == model_uuid:
             print("Using cached model: {}".format(torch_globals.executor_model))
         else:
             if model_loader:
@@ -123,6 +126,7 @@ def model_udf(model: Union[str, torch.nn.Module],
                 print("Using serialized model from driver")
                 torch_globals.executor_model = driver_model
             torch_globals.executor_model.to(device)
+            torch_globals.model_uuid = model_uuid
 
         for batch in data:
             if input_columns:

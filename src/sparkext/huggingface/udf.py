@@ -15,6 +15,7 @@
 
 import pandas as pd
 import transformers
+import uuid
 
 from pyspark.sql.functions import pandas_udf
 from typing import Callable, Iterator, Optional, Union
@@ -26,9 +27,8 @@ except ImportError:
 
 # TODO: prohibit model instances due to serialization issues?
 # TODO: only allow model_loader, which can instantiate model and tokenizer and encapsulate tokenizer params
-# TODO: move sentence_transformers to it's own submodule?
 # TODO: use separate dictionaries for model/tokenizer kwargs?
-def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipelines.Pipeline, sentence_transformers.SentenceTransformer],
+def model_udf(model: Union[str, transformers.PreTrainedModel],
               tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
               return_type: Optional[str] = "string",
               model_loader: Optional[Callable] = None,
@@ -36,10 +36,12 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
     # TODO: handle path to local cache
     driver_model = None
     driver_tokenizer = None
+    model_uuid = uuid.uuid4()
+
     if model_loader:
         print("Deferring model loading to executors.")
     elif type(model) is str:
-        print("Loading {} model on driver".format(model))
+        print("Loading {} model and tokenizer on driver".format(model))
         driver_model = transformers.AutoModel.from_pretrained(model)
         driver_tokenizer = transformers.AutoTokenizer.from_pretrained(model)
     elif isinstance(model, transformers.PreTrainedModel):
@@ -47,33 +49,28 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
         assert tokenizer, "Please provide associated tokenizer"
         driver_model = model
         driver_tokenizer = tokenizer
-    elif isinstance(model, transformers.pipelines.Pipeline):
-        print("Using supplied Pipeline")
-        driver_model = model
-    elif sentence_transformers and isinstance(model, sentence_transformers.SentenceTransformer):
-        print("Using supplied SentenceTransformer")
-        driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
 
-    # TODO: refactor predict functions
     # TODO: handle huggingface tensorflow models
-    def predict_model(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         import sparkext.huggingface.globals as hf_globals
         import torch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print("Using {} device".format(device))
 
-        if hf_globals.executor_model:
+        if hf_globals.executor_model and hf_globals.model_uuid == model_uuid:
             print("Using cached model: {}".format(hf_globals.executor_model))
         else:
             if model_loader:
                 print("Loading model on executors from: {}".format(model))
                 hf_globals.executor_model = model_loader(model)
             else:
+                print("Using serialized model from driver")
                 hf_globals.executor_model = driver_model
             hf_globals.executor_model.to(device)
+            hf_globals.model_uuid = model_uuid
 
         executor_tokenizer = driver_tokenizer
 
@@ -83,11 +80,32 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
             output = [executor_tokenizer.decode(o, **kwargs) for o in output_ids] if executor_tokenizer else output_ids
             yield pd.Series(list(output))
 
-    def predict_pipeline(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
-        import sparkext.huggingface.globals as hf_globals
-        import torch
+    return pandas_udf(predict, return_type)
 
-        if hf_globals.executor_model:
+def pipeline_udf(model: Union[str, transformers.pipelines.Pipeline],
+              return_type: Optional[str] = "string",
+              model_loader: Optional[Callable] = None,
+              **kwargs):
+    # TODO: handle path to local cache
+    driver_model = None
+    model_uuid = uuid.uuid4()
+
+    if model_loader:
+        print("Deferring model loading to executors.")
+    elif type(model) is str:
+        print("Loading {} pipeline on driver".format(model))
+        driver_model = transformers.pipelines.pipeline(model)
+    elif isinstance(model, transformers.pipelines.Pipeline):
+        print("Using supplied Pipeline")
+        driver_model = model
+    else:
+        raise ValueError("Unsupported model type: {}".format(type(model)))
+
+    # TODO: handle huggingface tensorflow models
+    def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
+        import sparkext.huggingface.globals as hf_globals
+
+        if hf_globals.executor_model and hf_globals.model_uuid == model_uuid:
             print("Using cached model: {}".format(hf_globals.executor_model))
         else:
             if model_loader:
@@ -96,37 +114,57 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.pipel
             else:
                 print("Using serialized model from driver")
                 hf_globals.executor_model = driver_model
+            hf_globals.model_uuid = model_uuid
 
         for batch in data:
             output = hf_globals.executor_model(list(batch))
             yield pd.DataFrame([result.values() for result in output])
 
-    def predict_sentence_transformer(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    return pandas_udf(predict, return_type)
+
+def sentence_transformer_udf(model: Union[str, sentence_transformers.SentenceTransformer],
+              return_type: Optional[str] = "array<float>",
+              model_loader: Optional[Callable] = None,
+              **kwargs):
+    if not sentence_transformers:
+        raise ImportError("Module sentence_transformers not found.")
+
+    # TODO: handle path to local cache
+    driver_model = None
+    model_uuid = uuid.uuid4()
+
+    if model_loader:
+        print("Deferring model loading to executors.")
+    elif type(model) is str:
+        print("Loading SentenceTransformer({}) on driver".format(model))
+        driver_model = sentence_transformers.SentenceTransformer(model)
+    elif isinstance(model, sentence_transformers.SentenceTransformer):
+        print("Using supplied SentenceTransformer")
+        driver_model = model
+    else:
+        raise ValueError("Unsupported model type: {}".format(type(model)))
+
+    def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         import sparkext.huggingface.globals as hf_globals
         import torch
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
         print("Using {} device".format(device))
 
-        if hf_globals.executor_model:
+        if hf_globals.executor_model and hf_globals.model_uuid == model_uuid:
             print("Using cached model: {}".format(hf_globals.executor_model))
         else:
             if model_loader:
                 print("Loading model on executors from: {}".format(model))
                 hf_globals.executor_model = model_loader(model)
             else:
+                print("Using serialized model from driver")
                 hf_globals.executor_model = driver_model
             hf_globals.executor_model.to(device)
+            hf_globals.model_uuid = model_uuid
 
         for batch in data:
             output = hf_globals.executor_model.encode(list(batch))
             yield pd.Series(list(output))
 
-    if isinstance(driver_model, transformers.PreTrainedModel):
-        return pandas_udf(predict_model, return_type)
-    elif isinstance(driver_model, transformers.pipelines.Pipeline):
-        return pandas_udf(predict_pipeline, return_type)
-    elif sentence_transformers and isinstance(driver_model, sentence_transformers.SentenceTransformer):
-        return pandas_udf(predict_sentence_transformer, return_type)
-    else:
-        raise ValueError("Unsupported model type: {}".format(type(driver_model)))
+    return pandas_udf(predict, return_type)
