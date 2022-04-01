@@ -14,6 +14,12 @@
 # limitations under the License.
 
 #!/bin/bash
+CLEANUP=$1
+
+if [[ "${CLEANUP}" == "clean" ]]; then
+    find examples -name "*_test.py" -or -name "*_test.out" | xargs rm
+    exit
+fi
 
 # list of notebooks to test
 NOTEBOOKS=(
