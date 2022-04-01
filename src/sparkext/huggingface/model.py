@@ -13,16 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pandas as pd
-import sentence_transformers
-import transformers
-
 from pyspark.ml.param.shared import Param, Params, TypeConverters
-from pyspark.sql.functions import pandas_udf, PandasUDFType
-from pyspark.sql.types import StringType
-from typing import Iterator
-
 from sparkext.model import ExternalModel
+from sparkext.huggingface.udf import model_udf, pipeline_udf, sentence_transformer_udf
 
 class TokenizerParams(Params):
 
@@ -55,58 +48,34 @@ class TokenizerParams(Params):
     def getTruncation(self):
         return self.getOrDefault(self.truncation)
 
-
+# TODO: convert kwargs to Params?
 class Model(ExternalModel, TokenizerParams):
-    """Spark ML Model wrapper for Huggingface models.
-
-    Assumptions:
-    - Input DataFrame has a single string column.
-    - Output DataFrame produces a single string column.
-    """
-
-    def __init__(self, model, tokenizer=None, prefix=None):
-        # TODO: add prefix as transformer
-        # TODO: add tokenizer as transformer
+    def __init__(self, model, tokenizer=None, **kwargs):
         self.model = model
         self.tokenizer = tokenizer
-        self.prefix = prefix
-        # print("model: {}".format(model))
-        # print("tokenizer: {}".format(tokenizer))
-        super(Model, self).__init__(model)
-
-    def _from_string(self, model_path):
-        # TODO: handle path to local cache
-        self.model = transformers.AutoModel.from_pretrained(model_path)
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(model_path)
-
-    def _from_object(self, model):
-        self.model = model
+        self.kwargs = kwargs
+        super(Model, self).__init__()
 
     def _transform(self, dataset):
-        # TODO: support more flexible input/output types
-        @pandas_udf("string")
-        def predict_string(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
-            for batch in data:
-                input = [self.prefix + s for s in batch.to_list()]
-                input_ids = self.tokenizer(input,
-                                           padding=self.getPadding(),
-                                           max_length=self.getMaxTargetLength(),
-                                           truncation=self.getTruncation(),
-                                           return_tensors=self.getReturnTensors()).input_ids
-                output_ids = self.model.generate(input_ids)
-                output = [self.tokenizer.decode(o, skip_special_tokens=self.getSkipSpecialTokens()) for o in output_ids]
-                yield pd.Series(list(output))
+        predict = model_udf(self.model, self.tokenizer, **self.kwargs)
+        return dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))
 
-        @pandas_udf("array<float>")
-        def predict_floats(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
-            for batch in data:
-                input = [s for s in batch.to_list()]
-                output = self.model.encode(input)
-                yield pd.Series(list(output))
+class PipelineModel(ExternalModel):
+    def __init__(self, model, return_type):
+        assert return_type, "Please specify a pandas_udf return_type for the pipeline model."
+        self.model = model
+        self.return_type = return_type
+        super(PipelineModel, self).__init__()
 
-        if isinstance(self.model, transformers.PreTrainedModel):
-            predict = predict_string
-        elif isinstance(self.model, sentence_transformers.SentenceTransformer):
-            predict = predict_floats
+    def _transform(self, dataset):
+        predict = pipeline_udf(self.model, return_type=self.return_type)
+        return dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))
 
-        return dataset.select(predict(dataset[0]).alias("prediction"))
+class SentenceTransformerModel(ExternalModel):
+    def __init__(self, model):
+        self.model = model
+        super(SentenceTransformerModel, self).__init__()
+
+    def _transform(self, dataset):
+        predict = sentence_transformer_udf(self.model)
+        return dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))

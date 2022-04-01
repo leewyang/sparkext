@@ -13,5 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sparkext.huggingface.model import Model
+from sparkext.huggingface.model import Model, PipelineModel, SentenceTransformerModel
 from sparkext.huggingface.udf import model_udf, pipeline_udf, sentence_transformer_udf

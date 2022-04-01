@@ -14,11 +14,11 @@
 # limitations under the License.
 
 from abc import ABC, abstractmethod
-from pyspark.ml import Transformer
+from pyspark.ml import Model
 from pyspark.ml.param.shared import Param, Params, TypeConverters
+from pyspark.ml.param.shared import HasInputCol, HasInputCols, HasOutputCol, HasOutputCols
 
 class CommonParams(Params):
-
     input_shape = Param(Params._dummy(), "input_shape", "Input shape expected by model", typeConverter=TypeConverters.toListInt)
 
     def __init__(self, *args):
@@ -27,25 +27,21 @@ class CommonParams(Params):
     def getInputShape(self):
         return self.getOrDefault(self.input_shape)
 
-class ExternalModel(Transformer, CommonParams, ABC):
-
-    def __init__(self, model):
-        self.model = model
-        if type(model) == str:
-          self._from_string(model)
-        else:
-          self._from_object(model)
+class ExternalModel(Model, CommonParams, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, ABC):
+    def __init__(self):
         super(ExternalModel, self).__init__()
-
-    @abstractmethod
-    def _from_string(self, model_path):
-        """Instantiate from a string path or identifier."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def _from_object(self, model):
-        """Instantiate from a model object from framework."""
-        raise NotImplementedError()
 
     def setInputShape(self, value):
         return self._set(input_shape=value)
+
+    def setInputCol(self, value):
+        return self._set(inputCol=value)
+
+    def setInputCols(self, value):
+        return self._set(inputCols=value)
+
+    def setOutputCol(self, value):
+        return self._set(outputCol=value)
+
+    def setOutputCols(self, value):
+        return self._set(outputCols=value)

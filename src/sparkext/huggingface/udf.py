@@ -28,6 +28,7 @@ except ImportError:
 # TODO: prohibit model instances due to serialization issues?
 # TODO: only allow model_loader, which can instantiate model and tokenizer and encapsulate tokenizer params
 # TODO: use separate dictionaries for model/tokenizer kwargs?
+# TODO: convert kwargs to Params?
 def model_udf(model: Union[str, transformers.PreTrainedModel],
               tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
               return_type: Optional[str] = "string",
