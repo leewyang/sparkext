@@ -13,5 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-executor_model = None
-model_uuid = None
+from uuid import UUID
+from sentence_transformers import SentenceTransformer
+from transformers import PreTrainedModel, PreTrainedTokenizer, TFPreTrainedModel
+from transformers.pipelines import Pipeline
+from typing import Union
+
+
+executor_model: Union[PreTrainedModel, TFPreTrainedModel, Pipeline, SentenceTransformer] = None
+executor_tokenizer: PreTrainedTokenizer = None
+model_uuid: UUID = None

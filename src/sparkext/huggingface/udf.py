@@ -29,7 +29,7 @@ except ImportError:
 # TODO: only allow model_loader, which can instantiate model and tokenizer and encapsulate tokenizer params
 # TODO: use separate dictionaries for model/tokenizer kwargs?
 # TODO: convert kwargs to Params?
-def model_udf(model: Union[str, transformers.PreTrainedModel],
+def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.TFPreTrainedModel],
               tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
               return_type: Optional[str] = "string",
               model_loader: Optional[Callable] = None,
@@ -41,11 +41,13 @@ def model_udf(model: Union[str, transformers.PreTrainedModel],
 
     if model_loader:
         print("Deferring model loading to executors.")
+        # temporarily load model on driver to get model metadata
+        driver_model, driver_tokenizer  = model_loader(model)
     elif type(model) is str:
         print("Loading {} model and tokenizer on driver".format(model))
         driver_model = transformers.AutoModel.from_pretrained(model)
         driver_tokenizer = transformers.AutoTokenizer.from_pretrained(model)
-    elif isinstance(model, transformers.PreTrainedModel):
+    elif isinstance(model, (transformers.PreTrainedModel, transformers.TFPreTrainedModel)):
         print("Using supplied Model and Tokenizer")
         assert tokenizer, "Please provide associated tokenizer"
         driver_model = model
@@ -53,8 +55,16 @@ def model_udf(model: Union[str, transformers.PreTrainedModel],
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
 
-    # TODO: handle huggingface tensorflow models
-    def predict(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    # get the model framework, e.g. 'pt' or 'tf'
+    model_framework = driver_model.framework
+
+    # clear the driver_model and driver_tokenizer if using model_loader to avoid serialization/errors
+    if model_loader:
+        driver_model = None
+        driver_tokenizer = None
+
+    # pytorch models
+    def predict_pt(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
         import sparkext.huggingface.globals as hf_globals
         import torch
 
@@ -63,25 +73,53 @@ def model_udf(model: Union[str, transformers.PreTrainedModel],
 
         if hf_globals.executor_model and hf_globals.model_uuid == model_uuid:
             print("Using cached model: {}".format(hf_globals.executor_model))
+            print("Using cached tokenizer: {}".format(hf_globals.executor_tokenizer))
         else:
             if model_loader:
-                print("Loading model on executors from: {}".format(model))
-                hf_globals.executor_model = model_loader(model)
+                print("Loading model and tokenizer on executors for: {}".format(model))
+                hf_globals.executor_model, hf_globals.executor_tokenizer = model_loader(model)
             else:
-                print("Using serialized model from driver")
+                print("Using serialized model and tokenizer from driver")
                 hf_globals.executor_model = driver_model
+                hf_globals.executor_tokenizer = driver_tokenizer
             hf_globals.executor_model.to(device)
             hf_globals.model_uuid = model_uuid
 
-        executor_tokenizer = driver_tokenizer
-
         for batch in data:
-            input_ids = executor_tokenizer(list(batch), **kwargs).input_ids if executor_tokenizer else input
+            input_ids = hf_globals.executor_tokenizer(list(batch), **kwargs).input_ids if hf_globals.executor_tokenizer else list(batch)
             output_ids = hf_globals.executor_model.generate(input_ids.to(device))
-            output = [executor_tokenizer.decode(o, **kwargs) for o in output_ids] if executor_tokenizer else output_ids
+            output = [hf_globals.executor_tokenizer.decode(o, **kwargs) for o in output_ids] if hf_globals.executor_tokenizer else output_ids
             yield pd.Series(list(output))
 
-    return pandas_udf(predict, return_type)
+    # tensorflow models
+    def predict_tf(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
+        import sparkext.huggingface.globals as hf_globals
+
+        if hf_globals.executor_model and hf_globals.model_uuid == model_uuid:
+            print("Using cached model: {}".format(hf_globals.executor_model))
+            print("Using cached tokenizer: {}".format(hf_globals.executor_tokenizer))
+        else:
+            if model_loader:
+                print("Loading model and tokenizer on executors for: {}".format(model))
+                hf_globals.executor_model, hf_globals.executor_tokenizer = model_loader(model)
+            else:
+                print("Using serialized model and tokenizer from driver")
+                hf_globals.executor_model = driver_model
+                hf_globals.executor_tokenizer = driver_tokenizer
+            hf_globals.model_uuid = model_uuid
+
+        for batch in data:
+            input_ids = hf_globals.executor_tokenizer(list(batch), **kwargs).input_ids if hf_globals.executor_tokenizer else batch.to_numpy()
+            output_ids = hf_globals.executor_model.generate(input_ids)
+            output = [hf_globals.executor_tokenizer.decode(o, **kwargs) for o in output_ids] if hf_globals.executor_tokenizer else output_ids
+            yield pd.Series(list(output))
+
+    if model_framework == 'pt':
+        return pandas_udf(predict_pt, return_type)
+    elif model_framework == 'tf':
+        return pandas_udf(predict_tf, return_type)
+    else:
+        raise ValueError("Unsupported model_framework: {}".format(model_framework))
 
 def pipeline_udf(model: Union[str, transformers.pipelines.Pipeline],
               return_type: Optional[str] = "string",
@@ -102,7 +140,6 @@ def pipeline_udf(model: Union[str, transformers.pipelines.Pipeline],
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
 
-    # TODO: handle huggingface tensorflow models
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         import sparkext.huggingface.globals as hf_globals
 

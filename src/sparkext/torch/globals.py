@@ -13,5 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-executor_model = None
-model_uuid = None
+from uuid import UUID
+import torch
+
+
+executor_model: torch.nn.Module = None
+model_uuid: UUID = None

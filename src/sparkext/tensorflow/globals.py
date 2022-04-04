@@ -13,5 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-executor_model = None
-model_uuid = None
+import tensorflow as tf
+from uuid import UUID
+
+
+executor_model: tf.keras.Model = None
+model_uuid: UUID = None

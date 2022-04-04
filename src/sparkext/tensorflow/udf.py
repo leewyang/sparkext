@@ -74,7 +74,6 @@ class ModelSummary():
         self.return_type = ', '.join(output_types)
         return self.return_type
 
-# TODO: automatically determine optimal batch_size?
 def model_udf(model: Union[str, tf.keras.Model],
               model_loader: Optional[Callable] = None,
               input_columns: list[str] = None,
@@ -102,7 +101,8 @@ def model_udf(model: Union[str, tf.keras.Model],
     if model_loader:
         driver_model = None
 
-    # TODO: configurable batch size
+    # TODO: user-configurable batch size
+    # TODO: automatically determine optimal batch_size?
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         import sparkext.tensorflow.globals as tf_globals
 
