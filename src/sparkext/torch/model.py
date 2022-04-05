@@ -25,11 +25,13 @@ class Model(ExternalModel):
 
     def _transform(self, dataset):
         if self.isDefined("inputCol"):
-            predict = model_udf(self.model, self.model_loader)
+            # single input column
+            predict = model_udf(self.model, self.model_loader, batch_size=self.getBatchSize())
             result = dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))
         elif self.isDefined("inputCols"):
+            # multiple input columns
             input_columns = self.getInputCols()
-            predict = model_udf(self.model, self.model_loader, input_columns=input_columns)
+            predict = model_udf(self.model, self.model_loader, batch_size=self.getBatchSize(), input_columns=input_columns)
             result = dataset.withColumn(self.getOutputCol(), predict(*input_columns))
         else:
             raise ValueError("Please set input column(s)")

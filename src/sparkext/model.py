@@ -13,13 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from pyspark.ml import Model
 from pyspark.ml.param.shared import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasInputCols, HasOutputCol, HasOutputCols
 
 class CommonParams(Params):
     input_shape = Param(Params._dummy(), "input_shape", "Input shape expected by model", typeConverter=TypeConverters.toListInt)
+    batch_size = Param(Params._dummy(), "batch_size", "Batch size for model input, default = -1 (no batching)", typeConverter=TypeConverters.toInt)
 
     def __init__(self, *args):
         super(CommonParams, self).__init__(*args)
@@ -27,9 +28,14 @@ class CommonParams(Params):
     def getInputShape(self):
         return self.getOrDefault(self.input_shape)
 
+    def getBatchSize(self):
+        return self.getOrDefault(self.batch_size)
+
+
 class ExternalModel(Model, CommonParams, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, ABC):
     def __init__(self):
         super(ExternalModel, self).__init__()
+        self._setDefault(batch_size=-1)
 
     def setInputShape(self, value):
         return self._set(input_shape=value)

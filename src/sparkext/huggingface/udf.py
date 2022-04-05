@@ -18,6 +18,7 @@ import transformers
 import uuid
 
 from pyspark.sql.functions import pandas_udf
+from sparkext.util import batched
 from typing import Callable, Iterator, Optional, Union
 
 try:
@@ -33,6 +34,7 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.TFPre
               tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
               return_type: Optional[str] = "string",
               model_loader: Optional[Callable] = None,
+              batch_size: int = -1,
               **kwargs):
     # TODO: handle path to local cache
     driver_model = None
@@ -85,11 +87,12 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.TFPre
             hf_globals.executor_model.to(device)
             hf_globals.model_uuid = model_uuid
 
-        for batch in data:
-            input_ids = hf_globals.executor_tokenizer(list(batch), **kwargs).input_ids if hf_globals.executor_tokenizer else list(batch)
-            output_ids = hf_globals.executor_model.generate(input_ids.to(device))
-            output = [hf_globals.executor_tokenizer.decode(o, **kwargs) for o in output_ids] if hf_globals.executor_tokenizer else output_ids
-            yield pd.Series(list(output))
+        for partition in data:
+            for batch in batched(partition, batch_size):
+                input_ids = hf_globals.executor_tokenizer(list(batch), **kwargs).input_ids if hf_globals.executor_tokenizer else list(batch)
+                output_ids = hf_globals.executor_model.generate(input_ids.to(device))
+                output = [hf_globals.executor_tokenizer.decode(o, **kwargs) for o in output_ids] if hf_globals.executor_tokenizer else output_ids
+                yield pd.Series(list(output))
 
     # tensorflow models
     def predict_tf(data: Iterator[pd.Series]) -> Iterator[pd.Series]:
@@ -108,11 +111,12 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.TFPre
                 hf_globals.executor_tokenizer = driver_tokenizer
             hf_globals.model_uuid = model_uuid
 
-        for batch in data:
-            input_ids = hf_globals.executor_tokenizer(list(batch), **kwargs).input_ids if hf_globals.executor_tokenizer else batch.to_numpy()
-            output_ids = hf_globals.executor_model.generate(input_ids)
-            output = [hf_globals.executor_tokenizer.decode(o, **kwargs) for o in output_ids] if hf_globals.executor_tokenizer else output_ids
-            yield pd.Series(list(output))
+        for partition in data:
+            for batch in batched(partition, batch_size):
+                input_ids = hf_globals.executor_tokenizer(list(batch), **kwargs).input_ids if hf_globals.executor_tokenizer else batch.to_numpy()
+                output_ids = hf_globals.executor_model.generate(input_ids)
+                output = [hf_globals.executor_tokenizer.decode(o, **kwargs) for o in output_ids] if hf_globals.executor_tokenizer else output_ids
+                yield pd.Series(list(output))
 
     if model_framework == 'pt':
         return pandas_udf(predict_pt, return_type)
@@ -122,8 +126,9 @@ def model_udf(model: Union[str, transformers.PreTrainedModel, transformers.TFPre
         raise ValueError("Unsupported model_framework: {}".format(model_framework))
 
 def pipeline_udf(model: Union[str, transformers.pipelines.Pipeline],
-              return_type: Optional[str] = "string",
               model_loader: Optional[Callable] = None,
+              return_type: Optional[str] = "string",
+              batch_size: int = -1,
               **kwargs):
     # TODO: handle path to local cache
     driver_model = None
@@ -154,15 +159,17 @@ def pipeline_udf(model: Union[str, transformers.pipelines.Pipeline],
                 hf_globals.executor_model = driver_model
             hf_globals.model_uuid = model_uuid
 
-        for batch in data:
-            output = hf_globals.executor_model(list(batch))
-            yield pd.DataFrame([result.values() for result in output])
+        for partition in data:
+            for batch in batched(partition, batch_size):
+                output = hf_globals.executor_model(list(batch))
+                yield pd.DataFrame([result.values() for result in output])
 
     return pandas_udf(predict, return_type)
 
 def sentence_transformer_udf(model: Union[str, sentence_transformers.SentenceTransformer],
-              return_type: Optional[str] = "array<float>",
               model_loader: Optional[Callable] = None,
+              return_type: Optional[str] = "array<float>",
+              batch_size: int = -1,
               **kwargs):
     if not sentence_transformers:
         raise ImportError("Module sentence_transformers not found.")
@@ -201,8 +208,9 @@ def sentence_transformer_udf(model: Union[str, sentence_transformers.SentenceTra
             hf_globals.executor_model.to(device)
             hf_globals.model_uuid = model_uuid
 
-        for batch in data:
-            output = hf_globals.executor_model.encode(list(batch))
-            yield pd.Series(list(output))
+        for partition in data:
+            for batch in batched(partition, batch_size):
+                output = hf_globals.executor_model.encode(list(batch))
+                yield pd.Series(list(output))
 
     return pandas_udf(predict, return_type)

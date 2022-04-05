@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as np
 import pandas as pd
 import re
 import tensorflow as tf
-import time
+import uuid
 
 from dataclasses import dataclass
 from pyspark.sql.functions import pandas_udf
+from sparkext.util import batched
 from typing import Callable, Iterator, Optional, Union
 
 
@@ -76,10 +76,13 @@ class ModelSummary():
 
 def model_udf(model: Union[str, tf.keras.Model],
               model_loader: Optional[Callable] = None,
-              input_columns: list[str] = None,
+              input_columns: Optional[list[str]] = None,
+              batch_size: int = -1,
               **kwargs):
     # TODO: handle plain saved_models
     driver_model = None
+    model_uuid = uuid.uuid4()
+
     if model_loader:
         print("Deferring model loading to executors.")
         # temporarily load model on driver to get model metadata
@@ -101,38 +104,39 @@ def model_udf(model: Union[str, tf.keras.Model],
     if model_loader:
         driver_model = None
 
-    # TODO: user-configurable batch size
     # TODO: automatically determine optimal batch_size?
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
         import sparkext.tensorflow.globals as tf_globals
+        import numpy as np
 
-        if tf_globals.executor_model:
+        if tf_globals.executor_model and tf_globals.model_uuid == model_uuid:
             print("Using cached model: {}".format(tf_globals.executor_model))
         else:
             if model_loader:
                 print("Loading model on executors from: {}".format(model))
                 tf_globals.executor_model = model_loader(model)
-                time.sleep(5)
             else:
                 print("Using serialized model from driver")
                 tf_globals.executor_model = driver_model
+            tf_globals.model_uuid = model_uuid
 
-        for batch in data:
-            if input_columns:
-                # check if the number of inputs matches expected
-                num_expected = len(input_columns)
-                num_actual = len(batch)
-                assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
-                # create a dictionary of named inputs if input_columns provided
-                input = dict(zip(input_columns, batch))
-            else:
-                # vstack the batch if only one input expected
-                input_shape = model_summary.inputs[0].shape
-                input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
-                input = np.vstack(batch).reshape(input_shape)
+        for partition in data:
+            for batch in batched(partition, batch_size):
+                if input_columns:
+                    # check if the number of inputs matches expected
+                    num_expected = len(input_columns)
+                    num_actual = len(batch)
+                    assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
+                    # create a dictionary of named inputs if input_columns provided
+                    input = dict(zip(input_columns, batch))
+                else:
+                    # vstack the batch if only one input expected
+                    input_shape = model_summary.inputs[0].shape
+                    input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
+                    input = np.vstack(batch).reshape(input_shape)
 
-            # predict and return result
-            output = tf_globals.executor_model.predict(input)
-            yield pd.Series(list(output))
+                # predict and return result
+                output = tf_globals.executor_model.predict(input)
+                yield pd.Series(list(output))
 
     return pandas_udf(predict, model_summary.return_type)

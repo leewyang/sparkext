@@ -20,6 +20,7 @@ import uuid
 
 from dataclasses import dataclass
 from pyspark.sql.functions import pandas_udf
+from sparkext.util import batched
 from typing import Callable, Iterator, Optional, Union
 
 
@@ -81,6 +82,7 @@ class ModelSummary:
 def model_udf(model: Union[str, torch.nn.Module],
               model_loader: Optional[Callable] = None,
               input_columns: Optional[list[str]] = None,
+              batch_size: int = -1,
               **kwargs):
     driver_model = None
     model_uuid = uuid.uuid4()
@@ -128,21 +130,22 @@ def model_udf(model: Union[str, torch.nn.Module],
             torch_globals.executor_model.to(device)
             torch_globals.model_uuid = model_uuid
 
-        for batch in data:
-            if input_columns:
-                print("batch: {}".format(type(batch[0])))
-                # check if the number of inputs matches expected
-                num_expected = len(input_columns)
-                num_actual = len(batch)
-                assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
-                input = [torch.from_numpy(column.to_numpy()).to(device) for column in batch]
-                output = torch_globals.executor_model(*input)
-            else:
-                input_shape = model_summary.inputs[0].shape
-                input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
-                input = np.vstack(batch).reshape(input_shape)
-                input = torch.from_numpy(input).to(device)
-                output = torch_globals.executor_model(input)
+        for partition in data:
+            for batch in batched(partition, batch_size):
+                if input_columns:
+                    # print("batch: {}".format(type(batch[0])))
+                    # check if the number of inputs matches expected
+                    num_expected = len(input_columns)
+                    num_actual = len(batch)
+                    assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
+                    input = [torch.from_numpy(column.to_numpy()).to(device) for column in batch]
+                    output = torch_globals.executor_model(*input)
+                else:
+                    input_shape = model_summary.inputs[0].shape
+                    input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
+                    input = np.vstack(batch).reshape(input_shape)
+                    input = torch.from_numpy(input).to(device)
+                    output = torch_globals.executor_model(input)
 
             yield pd.Series(list(output.detach().cpu().numpy()))
 

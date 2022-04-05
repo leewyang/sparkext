@@ -13,9 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sentence_transformers
+import transformers
+
 from pyspark.ml.param.shared import Param, Params, TypeConverters
 from sparkext.model import ExternalModel
 from sparkext.huggingface.udf import model_udf, pipeline_udf, sentence_transformer_udf
+from typing import Callable, Optional, Union
 
 class TokenizerParams(Params):
 
@@ -50,32 +54,52 @@ class TokenizerParams(Params):
 
 # TODO: convert kwargs to Params?
 class Model(ExternalModel, TokenizerParams):
-    def __init__(self, model, tokenizer=None, **kwargs):
+    def __init__(self, model: Union[str, transformers.PreTrainedModel, transformers.TFPreTrainedModel],
+                       tokenizer: Optional[transformers.PreTrainedTokenizer] = None,
+                       model_loader: Optional[Callable] = None,
+                       return_type: Optional[str] = "string",
+                       **kwargs):
         self.model = model
         self.tokenizer = tokenizer
+        self.model_loader = model_loader
+        self.return_type = return_type
         self.kwargs = kwargs
         super(Model, self).__init__()
 
     def _transform(self, dataset):
-        predict = model_udf(self.model, self.tokenizer, **self.kwargs)
+        predict = model_udf(self.model, 
+                            self.tokenizer,
+                            model_loader=self.model_loader,
+                            return_type=self.return_type,
+                            batch_size=self.getBatchSize(),
+                            **self.kwargs)
         return dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))
 
 class PipelineModel(ExternalModel):
-    def __init__(self, model, return_type):
+    def __init__(self, model: Union[str, transformers.pipelines.Pipeline],
+                       model_loader: Optional[Callable] = None,
+                       return_type: str = "string",
+                       **kwargs):
         assert return_type, "Please specify a pandas_udf return_type for the pipeline model."
         self.model = model
+        self.model_loader = model_loader
         self.return_type = return_type
         super(PipelineModel, self).__init__()
 
     def _transform(self, dataset):
-        predict = pipeline_udf(self.model, return_type=self.return_type)
+        predict = pipeline_udf(self.model, model_loader=self.model_loader, return_type=self.return_type, batch_size=self.getBatchSize())
         return dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))
 
 class SentenceTransformerModel(ExternalModel):
-    def __init__(self, model):
+    def __init__(self, model: Union[str, sentence_transformers.SentenceTransformer],
+                       model_loader: Optional[Callable] = None,
+                       return_type: str = "array<float>",
+                       **kwargs):
         self.model = model
+        self.model_loader = model_loader
+        self.return_type = return_type
         super(SentenceTransformerModel, self).__init__()
 
     def _transform(self, dataset):
-        predict = sentence_transformer_udf(self.model)
+        predict = sentence_transformer_udf(self.model, model_loader=self.model_loader, return_type=self.return_type, batch_size=self.getBatchSize())
         return dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))
