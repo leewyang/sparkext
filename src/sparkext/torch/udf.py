@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import numpy as np
 import pandas as pd
 import sparkext
@@ -40,11 +41,13 @@ def model_udf(model: Union[str, torch.nn.Module],
             # pickled model
             print("Loading model on driver from {}".format(model))
             driver_model = torch.load(model)
+            if isinstance(driver_model, collections.OrderedDict):
+                raise ValueError("Cannot load state_dict without model, use model_loader function instead.")
         elif model.endswith(".ts"):
             raise ValueError("TorchScript models must use model_loader function.")
         else:
             raise ValueError("Unknown PyTorch model format: {}".format(model))
-    elif type(model) is torch.nn.Module:
+    elif isinstance(model, torch.nn.Module):
         driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))

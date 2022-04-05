@@ -39,7 +39,7 @@ def model_udf(model: Union[str, tf.keras.Model],
         print("Loading model on driver from {}".format(model))
         driver_model = tf.keras.models.load_model(model)
         driver_model.summary()
-    elif type(model) is tf.keras.Model:
+    elif isinstance(model, tf.keras.Model):
         driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
