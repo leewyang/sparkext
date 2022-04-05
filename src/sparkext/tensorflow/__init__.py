@@ -14,4 +14,5 @@
 # limitations under the License.
 
 from sparkext.tensorflow.model import Model
+from sparkext.tensorflow.model_summary import ModelSummary
 from sparkext.tensorflow.udf import model_udf

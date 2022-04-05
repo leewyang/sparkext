@@ -14,4 +14,5 @@
 # limitations under the License.
 
 from sparkext.torch.model import Model
+from sparkext.torch.model_summary import ModelSummary
 from sparkext.torch.udf import model_udf

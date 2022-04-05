@@ -4,10 +4,7 @@ from typing import Iterator, Union
 
 
 def batched(df: Union[pd.Series, pd.DataFrame], batch_size: int = -1) -> Iterator[Union[pd.DataFrame, pd.Series]]:
-    """Splits a pandas dataframe/series into batches.
-    
-    If batch_size > len(df), or if batch_size = -1 (default), returns full dataframe.
-    """
+    """Splits a pandas dataframe/series into batches."""
     if batch_size <= 0 or batch_size >= len(df):
         yield df
     else:
