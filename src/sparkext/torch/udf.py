@@ -40,6 +40,7 @@ def model_udf(model: Union[str, torch.nn.Module],
         if model.endswith(".pt") or model.endswith(".pth"):
             # pickled model
             print("Loading model on driver from {}".format(model))
+            print("WARNING: pickled models may not serialize correctly to executors")
             driver_model = torch.load(model)
             if isinstance(driver_model, collections.OrderedDict):
                 raise ValueError("Cannot load state_dict without model, use model_loader function instead.")

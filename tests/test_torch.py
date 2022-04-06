@@ -50,6 +50,9 @@ class PyTorchTest(SparkTest):
     def setUpClass(cls):
         super(PyTorchTest, cls).setUpClass()
 
+        # add this file to spark --py-files for pickle deserialization
+        cls.sc.addPyFile(__file__)
+
         # initialize seeds for reproducible test results
         np.random.seed(42)
         random.seed(42)

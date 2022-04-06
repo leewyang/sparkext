@@ -31,9 +31,9 @@ class SparkTest(unittest.TestCase):
         num_workers = os.getenv('SPARK_WORKER_INSTANCES')
         assert num_workers is not None, "Please export SPARK_WORKER_INSTANCES to your env."
         cls.num_workers = int(num_workers)
-        cls.conf = SparkConf().set(
-            'spark.scheduler.barrier.maxConcurrentTasksCheck.maxFailures', 3)
+        cls.conf = SparkConf()
         cls.sc = SparkContext(master, cls.__name__, conf=cls.conf)
+        cls.sc.addPyFile(__file__)
         cls.spark = SparkSession.builder.getOrCreate()
 
     @classmethod
