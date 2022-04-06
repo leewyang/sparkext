@@ -98,7 +98,7 @@ class PyTorchTest(SparkTest):
 
     @classmethod
     def tearDownClass(cls):
-        # os.system("rm -r {}".format(cls.model_path))
+        os.system("rm -r {}".format(cls.model_path))
         return super().tearDownClass()
 
     @unittest.skipUnless(torch, "torch is not installed.")
@@ -148,6 +148,39 @@ class PyTorchTest(SparkTest):
         self.assertAlmostEqual(result, 4.758, 2)
 
     @unittest.skipUnless(torch, "torch is not installed.")
+    def test_udf_model_loader(self):
+        def model_loader(model_path):
+            import torch
+
+            # ensure model class is defined in executor scope
+            class LinearNN(torch.nn.Module):
+                def __init__(self):
+                    super(LinearNN, self).__init__()
+                    self.linear = torch.nn.Sequential(
+                        torch.nn.Linear(2, 1)
+                    )
+
+                def forward(self, x):
+                    return self.linear(x)
+
+            # load model from state dict
+            model = LinearNN()
+            model.load_state_dict(torch.load(model_path))
+
+            return model
+
+        linear = model_udf(self.model_state_path, model_loader=model_loader)
+
+        # create test dataframe (converting to array of float)
+        df = self.spark.createDataFrame(self.test_examples.astype(float).tolist(), schema="_1 float, _2 float")
+        df = df.withColumn("data", array("_1", "_2")).select("data")
+
+        # apply model to test dataframe
+        preds = df.withColumn("preds", linear(col("data"))).select("preds").collect()
+        result = preds[0].preds[0]
+        self.assertAlmostEqual(result, 4.758, 2)
+
+    @unittest.skipUnless(torch, "torch is not installed.")
     def test_udf_model_path(self):
         # create pandas_udf from model path
 
@@ -172,7 +205,7 @@ class PyTorchTest(SparkTest):
         self.assertAlmostEqual(result, 4.758, 2)
 
     @unittest.skipUnless(torch, "torch is not installed.")
-    def test_udf_model_loader(self):
+    def test_udf_model_loader_ts(self):
         # create pandas_udf using model_loader
         def model_loader(model_path):
             import torch

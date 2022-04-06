@@ -25,35 +25,35 @@ class UtilTest(unittest.TestCase):
 
         # no batching, expect 1 batch of 10
         batches = list(batched(pdf, -1))
-        self.assertEquals(1, len(batches))
-        self.assertEquals(10, len(batches[0]))
+        self.assertEqual(1, len(batches))
+        self.assertEqual(10, len(batches[0]))
 
         # no batching, expect 1 batch of 10
         batches = list(batched(pdf, 0))
-        self.assertEquals(1, len(batches))
-        self.assertEquals(10, len(batches[0]))
+        self.assertEqual(1, len(batches))
+        self.assertEqual(10, len(batches[0]))
 
         # batch_size = 1, expect 10 batches of 1
         batches = list(batched(pdf, 1))
-        self.assertEquals(10, len(batches))
-        self.assertEquals(1, len(batches[0]))
+        self.assertEqual(10, len(batches))
+        self.assertEqual(1, len(batches[0]))
 
         # batch_size = 4, expect 3 batches of 4, 4, 2
         batches = list(batched(pdf, 4))
-        self.assertEquals(3, len(batches))
-        self.assertEquals(4, len(batches[0]))
-        self.assertEquals(4, len(batches[1]))
-        self.assertEquals(2, len(batches[2]))
+        self.assertEqual(3, len(batches))
+        self.assertEqual(4, len(batches[0]))
+        self.assertEqual(4, len(batches[1]))
+        self.assertEqual(2, len(batches[2]))
 
         # batch_size = 10, expect 1 batch of 10
         batches = list(batched(pdf, 10))
-        self.assertEquals(1, len(batches))
-        self.assertEquals(10, len(batches[0]))
+        self.assertEqual(1, len(batches))
+        self.assertEqual(10, len(batches[0]))
 
         # batch_size > len(pdf), expect 1 batch of 10
         batches = list(batched(pdf, 1000))
-        self.assertEquals(1, len(batches))
-        self.assertEquals(10, len(batches[0]))
+        self.assertEqual(1, len(batches))
+        self.assertEqual(10, len(batches[0]))
 
 
 if __name__ == '__main__':
