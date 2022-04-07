@@ -18,6 +18,7 @@ from pyspark.ml import Model
 from pyspark.ml.param.shared import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasInputCols, HasOutputCol, HasOutputCols
 
+
 class CommonParams(Params):
     input_shape = Param(Params._dummy(), "input_shape", "Input shape expected by model", typeConverter=TypeConverters.toListInt)
     batch_size = Param(Params._dummy(), "batch_size", "Batch size for model input, default = -1 (no batching)", typeConverter=TypeConverters.toInt)
