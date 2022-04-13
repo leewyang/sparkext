@@ -2,7 +2,7 @@
 
 Proof-of-concept code for [SPIP: Simplified API for DL Inferencing](https://issues.apache.org/jira/browse/SPARK-38648) (to make Spark inferencing with DL models easier).
 
-Note: please comment directly to the SPIP JIRA ticket for further discussion.
+Note: please comment directly in the SPIP JIRA ticket for further discussion.
 
 ## Example Notebooks
 
@@ -20,14 +20,14 @@ predictions = df.withColumn("preds", mnist(col("data"))).collect()
 
 In this simple case, the `model_udf` will use TensorFlow APIs to load and instrospect the model to wire up the Spark DataFrame columns to the TensorFlow model inputs, automatically converting from Spark data types to TensorFlow tensor types, and vice-versa.
 
-In more complex cases, large, complex models can be loaded directly from the executors via a user-provided `model_loader` function and even cached in Spark's python workers.
+In more complex cases, large models can be loaded directly from the executors via a user-provided `model_loader` function and cached in Spark's python workers.
 
 All notebooks have been saved with sample outputs for quick browsing.
 
 ## Running the Notebooks
 
 If you want to run the notebooks yourself, please follow these instructions.
-Note: for simplicity, this uses a small Spark Standalone cluster on a single host.
+For simplicity, this uses a small Spark Standalone cluster on a single host.
 ```
 # clone repo and install sparkext
 git clone https://github.com/leewyang/sparkext.git
