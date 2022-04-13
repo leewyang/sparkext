@@ -13,10 +13,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sparkext.tensorflow
-import sparkext.torch
-import sparkext.huggingface
+import numpy as np
+import pandas as pd
 
-# TODO: pull up model_udfs to top-level, e.g. from sparkext import tf_udf?
+from typing import Iterator, Union
+from pyspark import SparkContext
+from zipimport import zipimporter
 
-__version__ = "0.0.1"
+from sparkext.framework import Plugin
+
+
+def batched(df: Union[pd.Series, pd.DataFrame], batch_size: int = -1) -> Iterator[Union[pd.DataFrame, pd.Series]]:
+    if batch_size <= 0 or batch_size >= len(df):
+        yield df
+    else:
+        num_batches = int(np.ceil(len(df) / batch_size))
+        for i in range(num_batches):
+            yield df[i*batch_size: (i+1)*batch_size]
+
+def load(module_name: str, zip_path: str) -> Plugin:
+    # dynamically load plugin zip file here
+    zi = zipimporter(zip_path)
+    module = zi.load_module(module_name)
+
+    # ensure plugin files are available on executors
+    sc = SparkContext.getOrCreate()
+    sc.addPyFile(zip_path)
+
+    # return module
+    return module.plugin()

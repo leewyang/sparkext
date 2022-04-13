@@ -15,7 +15,8 @@
 
 import re
 import tensorflow as tf
-from dataclasses import dataclass
+
+from sparkext.framework import ModelSummary, TensorSummary
 
 udf_types = {
     tf.bool: "bool",
@@ -29,13 +30,8 @@ udf_types = {
     tf.string: "str"
 }
 
-@dataclass(frozen=True)
-class TensorSummary():
-    shape: list[int]
-    dtype: tf.DType
-    name: str
 
-class ModelSummary():
+class TFModelSummary(ModelSummary):
     """Helper class to get spark-serializable metadata for a potentially unserializable model."""
     num_params: int
     inputs: list[TensorSummary]
@@ -44,25 +40,30 @@ class ModelSummary():
 
     def __init__(self, model: tf.keras.Model):
         self.num_params = model.count_params()
-        self.inputs = [TensorSummary(list(input.shape), input.dtype, input.name) for input in model.inputs]
-        self.outputs = [TensorSummary(list(output.shape), output.dtype, output.name) for output in model.outputs]
+        self.inputs = [TensorSummary(list(input.shape), self.type_str(input), input.name) for input in model.inputs]
+        self.outputs = [TensorSummary(list(output.shape), self.type_str(output), output.name) for output in model.outputs]
         self.return_type = self.get_return_type()
 
     def __repr__(self) -> str:
         return "ModelSummary(num_params={}, inputs={}, outputs={}) -> {}".format(self.num_params, self.inputs, self.outputs, self.return_type)
 
-    def get_return_type(self, names=False) -> str:
+    def get_return_type(self, return_names=False) -> str:
         """Get Spark SQL type string for output of the model."""
+        if return_names:
+            output_types = ["{} {}".format(self.normalize(output.name), output.dtype) for output in self.outputs]
+        else:
+            output_types = [output.dtype for output in self.outputs]
 
-        def type_str(tensor: tf.Tensor) -> str:
-            # map tf.dtype to sql type str
-            udf_type = udf_types[tensor.dtype]
-            # normalize name for spark, stripping off anything after '/' or ':'
-            name = re.split('[/:]', tensor.name)[0]
-            # wrap sql type str with 'array', if needed
-            tensor_type = f"array<{udf_type}>" if len(tensor.shape) > 0 else udf_type
-            return f"{name} {tensor_type}" if names else f"{tensor_type}"
-
-        output_types = [type_str(output) for output in self.outputs]
         self.return_type = ', '.join(output_types)
         return self.return_type
+
+    def normalize(self, tensor_name: str) -> str:
+        """Strip off anything after '/' or ':' for compatibiilty with Spark column name restrictions."""
+        return re.split('[/:]', tensor_name)[0]
+
+    def type_str(self, tensor: tf.Tensor) -> str:
+        """Map tf.dtype to Spark SQL type str"""
+        udf_type = udf_types[tensor.dtype]
+        # wrap sql type str with 'array', if needed
+        tensor_type = f"array<{udf_type}>" if len(tensor.shape) > 0 else udf_type
+        return tensor_type

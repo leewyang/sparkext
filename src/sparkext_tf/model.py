@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from sparkext.model import ExternalModel
-from sparkext.tensorflow.udf import model_udf
+from sparkext.framework import Model
+from sparkext_tf.udf import model_udf
 
 
-class Model(ExternalModel):
+class TFModel(Model):
     """Spark ML Model wrapper for TensorFlow Keras saved_models."""
-    def __init__(self, model, model_loader=None):
+    def __init__(self, model, model_loader=None, **kwargs):
         self.model = model
         self.model_loader = model_loader
         super().__init__()

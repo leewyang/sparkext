@@ -13,22 +13,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections
-import numpy as np
 import pandas as pd
-import sparkext
-import torch
+import tensorflow as tf
 import uuid
 
 from pyspark.sql.functions import pandas_udf
 from typing import Callable, Iterator, Optional, Union
 
+import sparkext
+import sparkext_tf
 
-def model_udf(model: Union[str, torch.nn.Module],
+
+def model_udf(model: Union[str, tf.keras.Model],
               model_loader: Optional[Callable] = None,
               input_columns: Optional[list[str]] = None,
-              batch_size: int = -1,
+              batch_size: int = -2,
               **kwargs):
+    # TODO: handle plain saved_models
     driver_model = None
     model_uuid = uuid.uuid4()
 
@@ -37,64 +38,55 @@ def model_udf(model: Union[str, torch.nn.Module],
         # temporarily load model on driver to get model metadata
         driver_model = model_loader(model)
     elif type(model) is str:
-        if model.endswith(".pt") or model.endswith(".pth"):
-            # pickled model
-            print("Loading model on driver from {}".format(model))
-            print("WARNING: pickled models may not serialize correctly to executors")
-            driver_model = torch.load(model)
-            if isinstance(driver_model, collections.OrderedDict):
-                raise ValueError("Cannot load state_dict without model, use model_loader function instead.")
-        elif model.endswith(".ts"):
-            raise ValueError("TorchScript models must use model_loader function.")
-        else:
-            raise ValueError("Unknown PyTorch model format: {}".format(model))
-    elif isinstance(model, torch.nn.Module):
+        print("Loading model on driver from {}".format(model))
+        driver_model = tf.keras.models.load_model(model)
+        driver_model.summary()
+    elif isinstance(model, tf.keras.Model):
         driver_model = model
     else:
         raise ValueError("Unsupported model type: {}".format(type(model)))
 
-    # get model input_shape and output_type
-    model_summary = sparkext.torch.ModelSummary(driver_model)
+    # get model output_type
+    # note: need to do this on the driver to construct the pandas_udf below
+    model_summary = sparkext_tf.TFModelSummary(driver_model)
     print(model_summary)
     # clear the driver_model if using model_loader to avoid serialization/errors
     if model_loader:
         driver_model = None
 
+    # TODO: automatically determine optimal batch_size?
     def predict(data: Iterator[pd.DataFrame]) -> Iterator[pd.DataFrame]:
-        import sparkext.torch.globals as torch_globals
+        import sparkext_tf.globals as tf_globals
+        import numpy as np
 
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print("Using {} device".format(device))
-
-        if torch_globals.executor_model and torch_globals.model_uuid == model_uuid:
-            print("Using cached model: {}".format(torch_globals.executor_model))
+        if tf_globals.executor_model and tf_globals.model_uuid == model_uuid:
+            print("Using cached model: {}".format(tf_globals.executor_model))
         else:
             if model_loader:
-                print("Loading model on executor from: {}".format(model))
-                torch_globals.executor_model = model_loader(model)
+                print("Loading model on executors from: {}".format(model))
+                tf_globals.executor_model = model_loader(model)
             else:
                 print("Using serialized model from driver")
-                torch_globals.executor_model = driver_model
-            torch_globals.executor_model.to(device)
-            torch_globals.model_uuid = model_uuid
+                tf_globals.executor_model = driver_model
+            tf_globals.model_uuid = model_uuid
 
         for partition in data:
-            for batch in sparkext.util.batched(partition, batch_size):
+            for batch in sparkext.batched(partition, batch_size):
                 if input_columns:
-                    # print("batch: {}".format(type(batch[0])))
                     # check if the number of inputs matches expected
                     num_expected = len(input_columns)
                     num_actual = len(batch)
                     assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
-                    input = [torch.from_numpy(column.to_numpy()).to(device) for column in batch]
-                    output = torch_globals.executor_model(*input)
+                    # create a dictionary of named inputs if input_columns provided
+                    input = dict(zip(input_columns, batch))
                 else:
+                    # vstack the batch if only one input expected
                     input_shape = model_summary.inputs[0].shape
                     input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
                     input = np.vstack(batch).reshape(input_shape)
-                    input = torch.from_numpy(input).to(device)
-                    output = torch_globals.executor_model(input)
 
-            yield pd.Series(list(output.detach().cpu().numpy()))
+                # predict and return result
+                output = tf_globals.executor_model.predict(input)
+                yield pd.Series(list(output))
 
     return pandas_udf(predict, model_summary.return_type)

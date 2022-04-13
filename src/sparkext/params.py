@@ -13,13 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from uuid import UUID
-from sentence_transformers import SentenceTransformer
-from transformers import PreTrainedModel, PreTrainedTokenizer, TFPreTrainedModel
-from transformers.pipelines import Pipeline
-from typing import Union
+from pyspark.ml.param.shared import Param, Params, TypeConverters
 
 
-executor_model: Union[PreTrainedModel, TFPreTrainedModel, Pipeline, SentenceTransformer] = None
-executor_tokenizer: PreTrainedTokenizer = None
-model_uuid: UUID = None
+class CommonParams(Params):
+    input_shape = Param(Params._dummy(), "input_shape", "Input shape expected by model", typeConverter=TypeConverters.toListInt)
+    batch_size = Param(Params._dummy(), "batch_size", "Batch size for model input, default = -1 (no batching)", typeConverter=TypeConverters.toInt)
+
+    def __init__(self, *args):
+        super(CommonParams, self).__init__(*args)
+
+    def getInputShape(self):
+        return self.getOrDefault(self.input_shape)
+
+    def getBatchSize(self):
+        return self.getOrDefault(self.batch_size)
