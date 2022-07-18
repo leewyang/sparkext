@@ -22,31 +22,32 @@ import unittest
 from packaging import version
 from pathlib import Path
 from pyspark.sql.functions import array, col
-from sparkext.torch import model_udf, Model
 from test_base import SparkTest
 
 # conditionally import torch
 try:
     import torch
+    from sparkext.torch import model_udf, Model
+    HAS_TORCH = True
 except ImportError:
-    torch = None
+    HAS_TORCH = False
 
 
-class LinearNN(torch.nn.Module):
-    """Simple linear model"""
-    def __init__(self):
-        super(LinearNN, self).__init__()
-        self.linear = torch.nn.Sequential(
-            torch.nn.Linear(2, 1)
-        )
+if HAS_TORCH:
+    class LinearNN(torch.nn.Module):
+        """Simple linear model"""
+        def __init__(self):
+            super(LinearNN, self).__init__()
+            self.linear = torch.nn.Sequential(
+                torch.nn.Linear(2, 1)
+            )
 
-    def forward(self, x):
-        return self.linear(x)
-
+        def forward(self, x):
+            return self.linear(x)
 
 class PyTorchTest(SparkTest):
-
     @classmethod
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def setUpClass(cls):
         super(PyTorchTest, cls).setUpClass()
 
@@ -100,18 +101,19 @@ class PyTorchTest(SparkTest):
         torch.jit.script(model).save(cls.model_ts_path)         # torchscript
 
     @classmethod
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def tearDownClass(cls):
         os.system("rm -r {}".format(cls.model_path))
         return super().tearDownClass()
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_min_version(self):
         torch_version = version.parse(torch.__version__)
         min_version = version.parse("1.8")
         self.assertTrue(torch_version > min_version,
                         "minimum supported version is {}".format(min_version))
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_model(self):
         test = torch.from_numpy(self.test_examples).float()
 
@@ -134,7 +136,7 @@ class PyTorchTest(SparkTest):
         result = preds[0][0].detach().numpy()
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_udf_model_instance(self):
         # create pandas_udf from model instance
         model = LinearNN()
@@ -150,7 +152,7 @@ class PyTorchTest(SparkTest):
         result = preds[0].preds[0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_udf_model_loader(self):
         def model_loader(model_path):
             import torch
@@ -183,7 +185,7 @@ class PyTorchTest(SparkTest):
         result = preds[0].preds[0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_udf_model_path(self):
         # create pandas_udf from model path
 
@@ -207,7 +209,7 @@ class PyTorchTest(SparkTest):
         result = preds[0].preds[0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_udf_model_loader_ts(self):
         # create pandas_udf using model_loader
         def model_loader(model_path):
@@ -225,7 +227,7 @@ class PyTorchTest(SparkTest):
         result = preds[0].preds[0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_udf_model_cache(self):
         # create pandas_udf using model_loader with artificial delay
         delay = 5
@@ -267,7 +269,7 @@ class PyTorchTest(SparkTest):
         stop = time.time()
         self.assertTrue((stop - start) < delay)
 
-    @unittest.skipUnless(torch, "torch is not installed.")
+    @unittest.skipUnless(HAS_TORCH, "torch is not installed.")
     def test_model_class(self):
         # create Model from saved model
         model = Model(self.model_path).setInputCol("data").setOutputCol("preds")

@@ -22,19 +22,21 @@ import unittest
 from packaging import version
 from pathlib import Path
 from pyspark.sql.functions import array, col
-from sparkext.tensorflow import model_udf, Model
 from test_base import SparkTest
 
 # conditionally import tensorflow
 try:
     import tensorflow as tf
+    from sparkext.tensorflow import model_udf, Model
+    HAS_TENSORFLOW=True
 except ImportError:
-    tf = None
+    HAS_TENSORFLOW=False
 
 
 class TensorFlowTest(SparkTest):
 
     @classmethod
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def setUpClass(cls):
         super(TensorFlowTest, cls).setUpClass()
 
@@ -65,24 +67,25 @@ class TensorFlowTest(SparkTest):
         model.save(cls.model_path)
 
     @classmethod
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def tearDownClass(cls):
         shutil.rmtree(cls.model_path)
         return super().tearDownClass()
 
-    @unittest.skipUnless(tf, "tensorflow is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def test_min_version(self):
         tf_version = version.parse(tf.__version__)
         min_version  = version.parse("2.5.0")
         self.assertTrue(tf_version > min_version, "minimum supported version is {}".format(min_version))
 
-    @unittest.skipUnless(tf, "tensorflow is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def test_model(self):
         model = tf.keras.models.load_model(self.model_path)
         preds = model.predict(self.test_examples)
         result = preds[0][0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(tf, "tensorflow is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def test_udf_driver_model_instance(self):
         # create pandas_udf from saved model, loaded on driver
         model = tf.keras.models.load_model(self.model_path)
@@ -97,7 +100,7 @@ class TensorFlowTest(SparkTest):
         result = preds[0].preds[0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(tf, "tensorflow is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def test_udf_driver_model_load(self):
         # create pandas_udf from saved model, loaded on driver
         linear = model_udf(self.model_path)
@@ -111,7 +114,7 @@ class TensorFlowTest(SparkTest):
         result = preds[0].preds[0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(tf, "tensorflow is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def test_udf_model_loader(self):
         # create pandas_udf from saved model, using model loader
         def model_loader(model_path):
@@ -128,7 +131,7 @@ class TensorFlowTest(SparkTest):
         result = preds[0].preds[0]
         self.assertAlmostEqual(result, 4.758, 2)
 
-    @unittest.skipUnless(tf, "tensorflow is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def test_udf_model_cache(self):
         # create pandas_udf from saved model, using model loader, with artificial delay
         delay = 5
@@ -154,7 +157,7 @@ class TensorFlowTest(SparkTest):
         stop = time.time()
         self.assertTrue((stop - start) < delay)
 
-    @unittest.skipUnless(tf, "tensorflow is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed.")
     def test_model_class(self):
         # create Model from saved model
         model = Model(self.model_path).setInputCol("data").setOutputCol("preds")

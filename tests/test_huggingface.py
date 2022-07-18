@@ -20,21 +20,28 @@ import unittest
 
 from packaging import version
 from pyspark.sql.functions import col, pandas_udf
-from sparkext.huggingface import model_udf
-from sparkext.huggingface.udf import pipeline_udf, sentence_transformer_udf
 from test_base import SparkTest
 
 # conditionally import transformers
 try:
     import transformers
     from transformers import pipeline, T5Tokenizer, T5ForConditionalGeneration
+    from sparkext.huggingface import model_udf
+    from sparkext.huggingface.udf import pipeline_udf, sentence_transformer_udf
+    HAS_TRANSFORMERS=True
 except ImportError:
-    transformers = None
+    HAS_TRANSFORMERS=False
 
+try:
+    import tensorflow
+    HAS_TENSORFLOW=True
+except ImportError:
+    HAS_TENSORFLOW=False
 
 class HuggingfaceTest(SparkTest):
 
     @classmethod
+    @unittest.skipUnless(HAS_TRANSFORMERS, "transformers is not installed.")
     def setUpClass(cls):
         super(HuggingfaceTest, cls).setUpClass()
 
@@ -43,13 +50,14 @@ class HuggingfaceTest(SparkTest):
         random.seed(42)
         transformers.set_seed(42)
 
-    @unittest.skipUnless(transformers, "transformers is not installed.")
+    @unittest.skipUnless(HAS_TRANSFORMERS, "transformers is not installed.")
     def test_min_version(self):
         torch_version = version.parse(transformers.__version__)
         min_version = version.parse("4.0.0")
         self.assertTrue(torch_version > min_version, "minimum supported version is {}".format(min_version))
 
-    @unittest.skipUnless(transformers, "transformers is not installed.")
+    @unittest.skipUnless(HAS_TRANSFORMERS, "transformers is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed")
     def test_model_udf_instance(self):
         # instantiate model and tokenizer
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
@@ -86,7 +94,8 @@ class HuggingfaceTest(SparkTest):
         predictions.show(truncate=80)
         self.assertEqual(predictions.take(1)[0]['preds'], "La maison est merveilleuse")
 
-    @unittest.skipUnless(transformers, "transformers is not installed.")
+    @unittest.skipUnless(HAS_TRANSFORMERS, "transformers is not installed.")
+    @unittest.skipUnless(HAS_TENSORFLOW, "tensorflow is not installed")
     def test_model_udf_loader(self):
         def model_loader(model_id):
             # using TF variants of models as another sanity check
@@ -126,7 +135,7 @@ class HuggingfaceTest(SparkTest):
         predictions.show(truncate=80)
         self.assertEqual(predictions.take(1)[0]['preds'], "La maison est merveilleuse")
 
-    @unittest.skipUnless(transformers, "transformers is not installed.")
+    @unittest.skipUnless(HAS_TRANSFORMERS, "transformers is not installed.")
     def test_pipeline_udf_instance(self):
         pipe = pipeline("text-classification")
         classify = pipeline_udf(pipe, return_type="label string, score float")
@@ -140,7 +149,7 @@ class HuggingfaceTest(SparkTest):
         self.assertEqual("POSITIVE", preds[0]['label'])
         self.assertEqual("NEGATIVE", preds[1]['label'])
 
-    @unittest.skipUnless(transformers, "transformers is not installed.")
+    @unittest.skipUnless(HAS_TRANSFORMERS, "transformers is not installed.")
     def test_sentence_transformer_udf_id(self):
         encode = sentence_transformer_udf('paraphrase-MiniLM-L6-v2')
 
