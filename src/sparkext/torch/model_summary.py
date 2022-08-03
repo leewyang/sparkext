@@ -13,59 +13,39 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import torch
-from dataclasses import dataclass
+
+from mlflow.types.schema import TensorSpec
+from sparkext.model_summary import ModelSummary
 
 
-udf_types = {
-    torch.bool: "bool",
-    torch.int8: "byte",
-    torch.int16: "short",
-    torch.int32: "int",
-    torch.int64: "long",
-    torch.long: "long",
-    torch.float: "float",
-    torch.float32: "float",
-    torch.float64: "double",
-    torch.double: "double"
+np_types = {
+    torch.bool: np.dtype(np.bool8),
+    torch.int8: np.dtype(np.int8),
+    torch.int16: np.dtype(np.int16),
+    torch.int32: np.dtype(np.int32),
+    torch.int64: np.dtype(np.int64),
+    torch.long: np.dtype(np.int64),
+    torch.float: np.dtype(np.float16),
+    torch.float32: np.dtype(np.float32),
+    torch.float64: np.dtype(np.float64),
+    torch.double: np.dtype(np.double)
 }
 
-@dataclass(frozen=True)
-class TensorSummary():
-    shape: list[int]
-    dtype: torch.dtype
-    name: str
 
-
-class ModelSummary:
+class TorchModelSummary(ModelSummary):
     """Helper class to get spark-serializable metadata for a potentially unserializable model."""
-    num_params: int
-    inputs: list[TensorSummary]
-    outputs: list[TensorSummary]
-    return_type: str
 
     def __init__(self, model):
         params = list(model.parameters())
         self.num_params = sum([p.shape.numel() for p in params])
         # TODO: should inputs reflect signature of forward()
-        self.inputs = [TensorSummary(list(params[0].shape), params[0].dtype, params[0].name)]
-        self.outputs = [TensorSummary(list(params[-1].shape), params[-1].dtype, params[-1].name)]
+        # TODO: find better way to get input shape
+        self.inputs = [TensorSpec(np_types[params[0].dtype],
+                                  (params[0].shape[1],),
+                                  params[0].name)]
+        self.outputs = [TensorSpec(np_types[params[0].dtype],
+                                   list(params[-1].shape),
+                                   params[-1].name)]
         self.return_type = self.get_return_type()
-
-    def __repr__(self) -> str:
-        return "ModelSummary(num_params={}, inputs={}, outputs={}) -> {}".format(self.num_params, self.inputs, self.outputs, self.return_type)
-
-    def get_return_type(self, names=False) -> str:
-        """Get Spark SQL type string for output of the model."""
-
-        def type_str(tensor: torch.Tensor) -> str:
-            # map tf.dtype to sql type str
-            udf_type = udf_types[tensor.dtype]
-            name = tensor.name
-            # wrap sql type str with 'array', if needed
-            tensor_type = f"array<{udf_type}>" if len(tensor.shape) > 0 else udf_type
-            return f"{name} {tensor_type}" if names else f"{tensor_type}"
-
-        output_types = [type_str(output) for output in self.outputs]
-        self.return_type = ', '.join(output_types)
-        return self.return_type

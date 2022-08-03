@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import uuid
 import mlflow
+import uuid
 from pyspark.sql import SparkSession
 
 
@@ -29,7 +29,7 @@ def model_udf(spark: SparkSession,
 
     Parameters
     ----------
-    spark : SparkSession
+    spark : pyspark.sql.SparkSession
         Currently active Spark session
     model_uri : str
         URI path to a pre-trained model
@@ -47,15 +47,24 @@ def model_udf(spark: SparkSession,
     pandas_udf
     """
     if model_format != 'mlflow':
+        # if not mlflow model, try to save a temporary mlflow model
         tmp_path = "/tmp/mlflow_{}_model/{}".format(model_format, uuid.uuid4())
+        model_summary = None
         if model_format == 'tensorflow':
-            # TODO: infer signature
+            import tensorflow as tf
+            from sparkext.tensorflow.model_summary import TensorFlowModelSummary
+
+            tmp_model = tf.keras.models.load_model(model_uri)
+            model_summary = TensorFlowModelSummary(tmp_model)
             mlflow.tensorflow.save_model(tf_saved_model_dir=model_uri, 
                                          tf_meta_graph_tags=tf_meta_graph_tags,
                                          tf_signature_def_key=tf_signature_def_key,
+                                         signature=model_summary.signature(),
                                          path=tmp_path)
         elif model_format == 'torch':
             import torch
+            from sparkext.torch.model_summary import TorchModelSummary
+
             if model_uri.endswith(".ts"):
                 tmp_model = torch.jit.load(model_uri)
             elif model_uri.endswith(".pt") or model_uri.endswith(".pth"):
@@ -65,15 +74,18 @@ def model_udf(spark: SparkSession,
                     tmp_model = model
             else:
                 raise ValueError("Unknown pytorch model type: {}".format(model_uri))
-            # TODO: infer signature
-            mlflow.pytorch.save_model(pytorch_model=tmp_model, path=tmp_path)
+
+            model_summary = TorchModelSummary(tmp_model)
+            mlflow.pytorch.save_model(pytorch_model=tmp_model, path=tmp_path, signature=model_summary.signature())
         elif model_format == 'huggingface':
             # TODO; add support for huggingface models (not directly supported by MLFlow, but can 
-            # wrap via mlflow.pyfunc, e.g. https://vishsubramanian.me/hugging-face-with-mlflow/ 
+            # wrap via mlflow.pyfunc, e.g. https://vishsubramanian.me/hugging-face-with-mlflow/)
             pass
         else:
             raise ValueError("Unknown model format: {}".format(model_format))
 
+        print(model_summary)
+        print(model_summary.signature())
         model_uri = tmp_path
 
     return mlflow.pyfunc.spark_udf(spark, model_uri, **kwargs)
