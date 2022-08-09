@@ -12,57 +12,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-
-import re
+import numpy as np
 import tensorflow as tf
-from dataclasses import dataclass
+from sparkext.model_summary import ModelSummary as BaseModelSummary, TensorSummary
 
-udf_types = {
-    tf.bool: "bool",
-    tf.int8: "byte",
-    tf.int16: "short",
-    tf.int32: "int",
-    tf.int64: "long",
-    tf.float32: "float",
-    tf.float64: "double",
-    tf.double: "double",
-    tf.string: "str"
+# conversion from TF types to Numpy types
+np_types = {
+    tf.bool: np.dtype(np.bool),
+    tf.int8: np.dtype(np.int8),
+    tf.int16: np.dtype(np.int16),
+    tf.int32: np.dtype(np.int32),
+    tf.int64: np.dtype(np.int64),
+    tf.float32: np.dtype(np.float32),
+    tf.float64: np.dtype(np.float64),
+    tf.double: np.dtype(np.double),
+    tf.string: np.dtype(np.unicode_)
 }
 
-@dataclass(frozen=True)
-class TensorSummary():
-    shape: list[int]
-    dtype: tf.DType
-    name: str
-
-class ModelSummary():
+class ModelSummary(BaseModelSummary):
     """Helper class to get spark-serializable metadata for a potentially unserializable model."""
-    num_params: int
-    inputs: list[TensorSummary]
-    outputs: list[TensorSummary]
-    return_type: str = None
 
     def __init__(self, model: tf.keras.Model):
         self.num_params = model.count_params()
-        self.inputs = [TensorSummary(list(input.shape), input.dtype, input.name) for input in model.inputs]
-        self.outputs = [TensorSummary(list(output.shape), output.dtype, output.name) for output in model.outputs]
+        self.inputs = [TensorSummary(np_types[input.dtype],
+                                  [x if x else -1 for x in input.shape.as_list()],
+                                  input.name) for input in model.inputs]
+        self.outputs = [TensorSummary(np_types[output.dtype],
+                                   [x if x else -1 for x in output.shape.as_list()],
+                                   output.name) for output in model.outputs]
         self.return_type = self.get_return_type()
-
-    def __repr__(self) -> str:
-        return "ModelSummary(num_params={}, inputs={}, outputs={}) -> {}".format(self.num_params, self.inputs, self.outputs, self.return_type)
-
-    def get_return_type(self, names=False) -> str:
-        """Get Spark SQL type string for output of the model."""
-
-        def type_str(tensor: tf.Tensor) -> str:
-            # map tf.dtype to sql type str
-            udf_type = udf_types[tensor.dtype]
-            # normalize name for spark, stripping off anything after '/' or ':'
-            name = re.split('[/:]', tensor.name)[0]
-            # wrap sql type str with 'array', if needed
-            tensor_type = f"array<{udf_type}>" if len(tensor.shape) > 0 else udf_type
-            return f"{name} {tensor_type}" if names else f"{tensor_type}"
-
-        output_types = [type_str(output) for output in self.outputs]
-        self.return_type = ', '.join(output_types)
-        return self.return_type
