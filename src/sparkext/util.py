@@ -8,6 +8,6 @@ def batched(df: Union[pd.Series, pd.DataFrame], batch_size: int = -1) -> Iterato
     if batch_size <= 0 or batch_size >= len(df):
         yield df
     else:
-        num_batches = int(np.ceil(len(df) / batch_size))
-        for i in range(num_batches):
-            yield df[i*batch_size: (i+1)*batch_size]
+        for batch in np.array_split(df, (len(df.index) + batch_size - 1) // batch_size):
+            yield batch
+

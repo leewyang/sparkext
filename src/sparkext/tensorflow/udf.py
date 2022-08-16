@@ -73,15 +73,21 @@ def model_udf(model: Union[str, tf.keras.Model],
                 if input_columns:
                     # check if the number of inputs matches expected
                     num_expected = len(input_columns)
-                    num_actual = len(batch)
+                    num_actual = len(batch.columns)
                     assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
-                    # create a dictionary of named inputs if input_columns provided
-                    input = dict(zip(input_columns, batch))
+
+                    # rename dataframe column names to match model input names, if needed
+                    if input_columns != list(batch.columns):
+                        batch.columns = input_columns
+
+                    # create a dictionary of named inputs
+                    input = batch.to_dict('series')
                 else:
                     # vstack the batch if only one input expected
                     input_shape = model_summary.inputs[0].shape
                     input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
-                    input = np.vstack(batch).reshape(input_shape)
+                    # input = np.vstack(batch).reshape(input_shape)          # name, col
+                    input = np.vstack(batch.iloc[:,0]).reshape(input_shape)  # requires struct
 
                 # predict and return result
                 output = tf_globals.executor_model.predict(input)

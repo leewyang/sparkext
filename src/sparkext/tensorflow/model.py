@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pyspark.sql.functions import struct
 from sparkext.model import ExternalModel
 from sparkext.tensorflow.udf import model_udf
 
@@ -28,12 +29,12 @@ class Model(ExternalModel):
         if self.isDefined("inputCol"):
             # single input column
             predict = model_udf(self.model, self.model_loader, batch_size=self.getBatchSize())
-            result = dataset.withColumn(self.getOutputCol(), predict(self.getInputCol()))
+            result = dataset.withColumn(self.getOutputCol(), predict(struct(self.getInputCol())))
         elif self.isDefined("inputCols"):
             # multiple input columns
             input_columns = self.getInputCols()
             predict = model_udf(self.model, self.model_loader, batch_size=self.getBatchSize(), input_columns=input_columns)
-            result = dataset.withColumn(self.getOutputCol(), predict(*input_columns))
+            result = dataset.withColumn(self.getOutputCol(), predict(struct(*input_columns)))
         else:
             raise ValueError("Please set input column(s)")
 

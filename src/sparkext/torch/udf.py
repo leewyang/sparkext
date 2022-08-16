@@ -84,14 +84,14 @@ def model_udf(model: Union[str, torch.nn.Module],
                     # print("batch: {}".format(type(batch[0])))
                     # check if the number of inputs matches expected
                     num_expected = len(input_columns)
-                    num_actual = len(batch)
+                    num_actual = len(batch.columns)
                     assert num_actual == num_expected, "Model expected {} inputs, but received {}".format(num_expected, num_actual)
-                    input = [torch.from_numpy(column.to_numpy()).to(device) for column in batch]
+                    input = [torch.from_numpy(batch[column].to_numpy()).to(device) for column in batch.columns]
                     output = torch_globals.executor_model(*input)
                 else:
                     input_shape = model_summary.inputs[0].shape
                     input_shape[0] = -1         # replace None with -1 in batch dimension for numpy.reshape
-                    input = np.vstack(batch).reshape(input_shape)
+                    input = np.vstack(batch.iloc[:,0]).reshape(input_shape)
                     input = torch.from_numpy(input).to(device)
                     output = torch_globals.executor_model(input)
 
