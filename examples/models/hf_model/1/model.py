@@ -68,10 +68,12 @@ class TritonPythonModel:
         # You must parse model_config. JSON string is not parsed here
         self.model_config = model_config = json.loads(args['model_config'])
 
-         # Get score configuration
+        # Get output configuration
+        label_config = pb_utils.get_output_config_by_name(model_config, "label")
         score_config = pb_utils.get_output_config_by_name(model_config, "score")
 
         # Convert Triton types to numpy types
+        self.label_dtype = pb_utils.triton_string_to_numpy(label_config['data_type'])
         self.score_dtype = pb_utils.triton_string_to_numpy(score_config['data_type'])
 
     def execute(self, requests):
@@ -96,6 +98,7 @@ class TritonPythonModel:
           be the same as `requests`
         """
 
+        label_dtype = self.label_dtype
         score_dtype = self.score_dtype
 
         responses = []
@@ -111,12 +114,12 @@ class TritonPythonModel:
 
             results = self.pipe(sentences)
 
-            print("==== results: {}".format(results))
+            label = np.array([res['label'] for res in results])
             score = np.array([res['score'] for res in results])
-            print("==== score: {}".format(score))
 
             # Create output tensors. You need pb_utils.Tensor
             # objects to create pb_utils.InferenceResponse.
+            label_tensor = pb_utils.Tensor("label", label.astype(label_dtype))
             score_tensor = pb_utils.Tensor("score", score.astype(score_dtype))
 
             # Create InferenceResponse. You can set an error here in case
@@ -126,7 +129,7 @@ class TritonPythonModel:
             #
             # pb_utils.InferenceResponse(
             #    output_tensors=..., TritonError("An error occured"))
-            inference_response = pb_utils.InferenceResponse(output_tensors=[score_tensor])
+            inference_response = pb_utils.InferenceResponse(output_tensors=[label_tensor, score_tensor])
             responses.append(inference_response)
 
         # You should return a list of pb_utils.InferenceResponse. Length
