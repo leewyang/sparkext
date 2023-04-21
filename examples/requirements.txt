@@ -4,7 +4,7 @@ matplotlib
 numpy
 pandas
 pyarrow
-pyspark
+pyspark>=3.4.0
 sentencepiece
 tensorflow-cpu
 torch

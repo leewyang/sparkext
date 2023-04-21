@@ -106,7 +106,7 @@ class TritonPythonModel:
             # Get input numpy
             sentence_input = pb_utils.get_input_tensor_by_name(request, "sentence")
             sentences = list(sentence_input.as_numpy())
-            sentences = np.squeeze(sentences).tolist()
+            sentences = np.squeeze(sentences, -1).tolist()
             sentences = [s.decode('utf-8') for s in sentences]
 
             embedding = self.model.encode(sentences)

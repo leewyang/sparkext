@@ -27,8 +27,11 @@ examples/huggingface/conditional_generation.ipynb
 examples/huggingface/pipelines.ipynb
 examples/huggingface/sentence_transformers.ipynb
 examples/pytorch/image_classification.ipynb
+examples/pytorch/regression.ipynb
+examples/tensorflow/feature_columns.ipynb
 examples/tensorflow/image_classification.ipynb
-#examples/tensorflow/text_classification.ipynb
+examples/tensorflow/keras_metadata.ipynb
+examples/tensorflow/text_classification.ipynb
 )
 
 # convert notebooks to python
@@ -40,7 +43,7 @@ for NOTEBOOK in ${NOTEBOOKS[@]}; do
     # move to directory
     pushd ${DIR}
 
-    # comment out %%time 
+    # comment out %%time
     sed 's/%%time/# %%time/' ${BASE}.ipynb > ${BASE}_tmp.ipynb
 
     # convert to python
@@ -50,6 +53,7 @@ for NOTEBOOK in ${NOTEBOOKS[@]}; do
     cat <<EOF >${BASE}_test.py
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
+sc = spark.sparkContext
 EOF
     cat ${BASE}_tmp.py >> ${BASE}_test.py
 

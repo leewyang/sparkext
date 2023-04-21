@@ -1,0 +1,2 @@
+platform: "tensorflow_savedmodel"
+max_batch_size: 8192

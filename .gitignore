@@ -4,7 +4,10 @@ __pycache__
 *.egg-info
 *.pt
 *.pth
+*.tar.gz
 *.ts
+*_test.py
+*_test.out
 aclImdb*
 data
 fashion_mnist_test
